@@ -1,0 +1,7 @@
+spring:
+  profiles:
+    active: dev  # por agora trabalhamos sempre em H2
+
+logging:
+  level:
+    org.hibernate.SQL: warn
