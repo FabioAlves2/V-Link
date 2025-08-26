@@ -1,0 +1,9 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/vmp
+    username: vmp
+    password: vmp
+  jpa:
+    hibernate:
+      ddl-auto: update   # em produção idealmente usar migrações (Flyway)
+    show-sql: false
