@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+@CrossOrigin("http://localhost:5173/")
 // Expose REST endpoints
 @RestController
 // Define endpoints prefix
