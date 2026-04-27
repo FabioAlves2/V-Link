@@ -1,7 +1,7 @@
 // Create a new Event
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  Paper, Typography, TextField, Stack, Button, Alert
+  Paper, Typography, TextField, Stack, Button, Alert, Box
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
@@ -10,13 +10,33 @@ export default function CreateEvent() {
   const navigate = useNavigate();
   const [form, setForm] = useState({
     title: "", location: "", description: "",
-    startDate: "", endDate: ""
+    startDate: "", endDate: "", imageFile: null
   });
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [imagePreview, setImagePreview] = useState(null);
 
   const handleChange = (field) => (e) =>
     setForm((f) => ({ ...f, [field]: e.target.value }));
+
+  const handleImageChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setForm((f) => ({ ...f, imageFile: file }));
+    const url = URL.createObjectURL(file);
+    // revoke previous preview URL (avoid memory leaks)
+    setImagePreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return url;
+    });
+  };
+
+  // revoke on unmount
+  useEffect(() => {
+    return () => {
+      if (imagePreview) URL.revokeObjectURL(imagePreview);
+    };
+  }, [imagePreview]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -33,6 +53,7 @@ export default function CreateEvent() {
         description: form.description.trim(),
         startDate: toISO(form.startDate),
         endDate: toISO(form.endDate),
+        imageFile: form.imageFile
       });
       navigate("/");
     } catch (e) {
@@ -70,6 +91,20 @@ export default function CreateEvent() {
             InputLabelProps={{ shrink: true }}
           />
         </Stack>
+        {/* Image upload + preview */}
+        <Button component="label" variant="outlined">
+          Escolher imagem
+          <input hidden type="file" accept="image/*" onChange={handleImageChange} />
+        </Button>
+
+        {imagePreview && (
+          <Box
+            component="img"
+            src={imagePreview}
+            alt="Pré-visualização"
+            sx={{ maxWidth: 360, width: "100%", borderRadius: 1 }}
+          />
+        )}
 
         <Stack direction="row" spacing={2}>
           <Button type="submit" variant="contained" disabled={loading}>

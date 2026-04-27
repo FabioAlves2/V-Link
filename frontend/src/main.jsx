@@ -7,6 +7,7 @@ import App from "./App";
 import Event from "./pages/Event";
 import EventList from "./pages/EventList";
 import CreateEvent from "./pages/CreateEvent";
+import EventEdit from "./pages/EventEdit";
 
 const theme = createTheme({
   palette: {
@@ -26,6 +27,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           <Route path="/" element={<App />}>
             <Route index element={<EventList />} />         {/* "/" */}
             <Route path="events/:id" element={<Event />} />  {/* "/events/:id" */}
+            <Route path="events/:id/edit" element={<EventEdit />} />
             <Route path="new" element={<CreateEvent />} />   {/* "/new" */}
           </Route>
         </Routes>

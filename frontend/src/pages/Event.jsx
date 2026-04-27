@@ -7,36 +7,36 @@ import {
 import { api } from "../api";
 
 export default function Event() {
-  const { id } = useParams();           // <- vem da rota /events/:id
-  const navigate = useNavigate();
-  const [event, setEvent] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState(null);
-  const [joining, setJoining] = useState(false);
-  const [snack, setSnack] = useState("");
+    const { id } = useParams();           // <- vem da rota /events/:id
+    const navigate = useNavigate();
+    const [event, setEvent] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [err, setErr] = useState(null);
+    const [joining, setJoining] = useState(false);
+    const [snack, setSnack] = useState("");
 
-  // fetch quando o id muda
-  useEffect(() => {
+    // fetch quando o id muda
+    useEffect(() => {
     let cancel = false;
     setLoading(true);
     setErr(null);
 
     api.get(`/events/${id}`)
-      .then(res => { if (!cancel) setEvent(res.data); })
-      .catch(() => { if (!cancel) setErr("Não foi possível carregar o evento."); })
-      .finally(() => { if (!cancel) setLoading(false); });
+        .then(res => { if (!cancel) setEvent(res.data); })
+        .catch(() => { if (!cancel) setErr("Não foi possível carregar o evento."); })
+        .finally(() => { if (!cancel) setLoading(false); });
 
     return () => { cancel = true; };
-  }, [id]);
+    }, [id]);
 
-  const startLabel = useMemo(() =>
+    const startLabel = useMemo(() =>
     event?.startDate ? new Date(event.startDate).toLocaleString() : null, [event]);
-  const endLabel = useMemo(() =>
+    const endLabel = useMemo(() =>
     event?.endDate ? new Date(event.endDate).toLocaleString() : null, [event]);
 
-  const isParticipant = !!event?.isParticipant; // adapta ao que o backend devolve
+    const isParticipant = !!event?.isParticipant; // adapta ao que o backend devolve
 
-  async function handleJoin() {
+    async function handleJoin() {
     setJoining(true);
     setErr(null);
 
@@ -45,72 +45,83 @@ export default function Event() {
     setEvent(prev ? { ...prev, isParticipant: true } : prev);
 
     try {
-      await api.post(`/events/${id}/participants`); // adapta ao teu endpoint
-      setSnack("Inscrição confirmada!");
+        await api.post(`/events/${id}/participants`); // adapta ao teu endpoint
+        setSnack("Inscrição confirmada!");
     } catch {
-      // reverte se falhar
-      setEvent(prev);
-      setErr("Falha ao inscrever. Tenta novamente.");
+        // reverte se falhar
+        setEvent(prev);
+        setErr("Falha ao inscrever. Tenta novamente.");
     } finally {
-      setJoining(false);
+        setJoining(false);
     }
-  }
+    }
 
-  // UI
-  if (loading) {
+    async function onDelete(id){
+        await api.delete(`/events/${id}`);
+        setEvents(events.filter(ev => ev.id !== id));
+    }
+
+
+    // UI
+    if (loading) {
     return (
-      <Paper sx={{ p: 3 }}>
+        <Paper sx={{ p: 3 }}>
         <Skeleton variant="text" width={240} height={36} />
         <Skeleton variant="text" width={160} />
         <Divider sx={{ my: 2 }} />
         <Skeleton variant="rounded" height={120} />
-      </Paper>
+        </Paper>
     );
-  }
+    }
 
-  if (err) return <Alert severity="error" action={
+    if (err) return <Alert severity="error" action={
     <Button color="inherit" size="small" onClick={() => navigate(0)}>Tentar</Button>
-  }>{err}</Alert>;
+    }>{err}</Alert>;
 
-  if (!event) return <Alert severity="info">Evento não encontrado.</Alert>;
+    if (!event) return <Alert severity="info">Evento não encontrado.</Alert>;
 
-  return (
+    return (
     <>
-      <Paper sx={{ p: 3 }}>
+        <Paper sx={{ p: 3 }}>
         <Stack direction="row" justifyContent="space-between" alignItems="start" gap={2}>
-          <div>
+            <div>
             <Typography variant="h5" gutterBottom>{event.title}</Typography>
             <Typography variant="body2" color="text.secondary">{event.location}</Typography>
             <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: "wrap" }}>
-              {startLabel && <Chip label={`Início: ${startLabel}`} />}
-              {endLabel && <Chip label={`Fim: ${endLabel}`} />}
+                {startLabel && <Chip label={`Início: ${startLabel}`} />}
+                {endLabel && <Chip label={`Fim: ${endLabel}`} />}
             </Stack>
-          </div>
+            </div>
 
-          <Stack direction="row" spacing={1}>
+            <Stack direction="row" spacing={1}>
             <Button variant="text" onClick={() => navigate(-1)}>Voltar</Button>
             <Button
-              variant="contained"
-              onClick={handleJoin}
-              disabled={joining || isParticipant}
+                variant="contained"
+                onClick={handleJoin}
+                disabled={joining || isParticipant}
             >
-              {isParticipant ? "Inscrito" : (joining ? "A inscrever..." : "Participar")}
+                {isParticipant ? "Inscrito" : (joining ? "A inscrever..." : "Participar")}
             </Button>
-          </Stack>
+            </Stack>
         </Stack>
 
         <Divider sx={{ my: 2 }} />
         <Typography sx={{ whiteSpace: "pre-wrap" }}>
-          {event.description || "Sem descrição."}
+            {event.description || "Sem descrição."}
         </Typography>
-      </Paper>
 
-      <Snackbar
+        <Stack direction="row" justifyContent="space-between" alignItems="start" gap={2}>
+            <button onClick={()=>onDelete(id)}>Eliminar</button>
+            <button onClick={()=>navigate(`/events/${e.id}/edit`)}>Editar</button>
+        </Stack>
+        </Paper>
+
+        <Snackbar
         open={!!snack}
         autoHideDuration={2500}
         onClose={() => setSnack("")}
         message={snack}
-      />
+        />
     </>
-  );
+    );
 }
