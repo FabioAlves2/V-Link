@@ -1,3 +1,17 @@
+package com.vlink.backend.auth;
+
+import com.vlink.backend.model.User;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import java.nio.charset.StandardCharsets;
+import java.security.Key;
+import java.util.Date;
+
 @Component
 public class JwtUtil {
 
@@ -5,24 +19,24 @@ public class JwtUtil {
     private String secret;
 
     @Value("${jwt.expiration}")
-    private long expiration; // 15 minutos
+    private long expiration;
 
     @Value("${jwt.refresh-expiration}")
-    private long refreshExpiration; // 7 dias
+    private long refreshExpiration;
 
     private Key getSigningKey() {
         return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
-    public String generateToken(String email, Role role) {
+    public String generateToken(String email, User.Role role) {
         return buildToken(email, role, expiration);
     }
 
-    public String generateRefreshToken(String email, Role role) {
+    public String generateRefreshToken(String email, User.Role role) {
         return buildToken(email, role, refreshExpiration);
     }
 
-    private String buildToken(String email, Role role, long ttl) {
+    private String buildToken(String email, User.Role role, long ttl) {
         return Jwts.builder()
             .setSubject(email)
             .claim("role", role.name())

@@ -22,7 +22,8 @@ public class BootSeed {
                 User u = new User();
                 u.setName("Ana Organizer");
                 u.setEmail("ana@demo.pt");
-                u.setRole(User.Role.ORGANIZER);
+                u.setPassword("ana123");
+                u.setRole(User.Role.PROMOTER);
                 users.save(u);
             }
             if (events.count()==0){

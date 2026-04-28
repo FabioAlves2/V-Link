@@ -4,7 +4,7 @@ import {
   Paper, Typography, TextField, Stack, Button, Alert
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
-import { api } from "../api";
+import api from "../api/axiosConfig";
 
 export default function CreateEvent() {
   const navigate = useNavigate();

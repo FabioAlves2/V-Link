@@ -1,127 +1,216 @@
-// Specific info about event
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  Alert, Button, Chip, Divider, Paper, Skeleton, Stack, Typography, Snackbar
+    Box, Typography, Button, Chip, LinearProgress,
+    Skeleton, Alert
 } from "@mui/material";
-import { api } from "../api";
+import { LocationOn, CalendarToday, People, ArrowBack, BookmarkAdd, BookmarkAdded } from "@mui/icons-material";
+import api from "../api/axiosConfig";
+
+const TYPE_LABELS = {
+    LIMPEZA: "🧹 Limpeza", DOACAO: "🎁 Doação",
+    EDUCACAO: "📚 Educação", AMBIENTE: "🌿 Ambiente",
+    SOCIAL: "🤝 Social", OUTRO: "💡 Outro",
+};
+
+function formatDateTime(dt) {
+    if (!dt) return "—";
+    return new Date(dt).toLocaleString("pt-PT", {
+        day: "2-digit", month: "long", year: "numeric",
+        hour: "2-digit", minute: "2-digit"
+    });
+}
 
 export default function Event() {
-    const { id } = useParams();           // <- vem da rota /events/:id
+    const { id } = useParams();
     const navigate = useNavigate();
     const [event, setEvent] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [err, setErr] = useState(null);
-    const [joining, setJoining] = useState(false);
-    const [snack, setSnack] = useState("");
+    const [error, setError] = useState(null);
+    const [subscribed, setSubscribed] = useState(false);
 
-    // fetch quando o id muda
     useEffect(() => {
-    let cancel = false;
-    setLoading(true);
-    setErr(null);
-
-    api.get(`/events/${id}`)
-        .then(res => { if (!cancel) setEvent(res.data); })
-        .catch(() => { if (!cancel) setErr("Não foi possível carregar o evento."); })
-        .finally(() => { if (!cancel) setLoading(false); });
-
-    return () => { cancel = true; };
+        api.get(`/events/${id}`)
+            .then(({ data }) => setEvent(data))
+            .catch(() => setError("Evento não encontrado."))
+            .finally(() => setLoading(false));
     }, [id]);
 
-    const startLabel = useMemo(() =>
-    event?.startDate ? new Date(event.startDate).toLocaleString() : null, [event]);
-    const endLabel = useMemo(() =>
-    event?.endDate ? new Date(event.endDate).toLocaleString() : null, [event]);
-
-    const isParticipant = !!event?.isParticipant; // adapta ao que o backend devolve
-
-    async function handleJoin() {
-    setJoining(true);
-    setErr(null);
-
-    // optimistic UI
-    const prev = event;
-    setEvent(prev ? { ...prev, isParticipant: true } : prev);
-
-    try {
-        await api.post(`/events/${id}/participants`); // adapta ao teu endpoint
-        setSnack("Inscrição confirmada!");
-    } catch {
-        // reverte se falhar
-        setEvent(prev);
-        setErr("Falha ao inscrever. Tenta novamente.");
-    } finally {
-        setJoining(false);
-    }
-    }
-
-    async function onDelete(id){
-        await api.delete(`/events/${id}`);
-        setEvents(events.filter(ev => ev.id !== id));
-    }
-
-
-    // UI
-    if (loading) {
-    return (
-        <Paper sx={{ p: 3 }}>
-        <Skeleton variant="text" width={240} height={36} />
-        <Skeleton variant="text" width={160} />
-        <Divider sx={{ my: 2 }} />
-        <Skeleton variant="rounded" height={120} />
-        </Paper>
+    if (loading) return (
+        <Box sx={{ maxWidth: 800, mx: "auto", py: 4 }}>
+            <Skeleton variant="rectangular" height={360} sx={{ borderRadius: "20px", mb: 3 }} />
+            <Skeleton height={40} sx={{ mb: 1 }} />
+            <Skeleton height={24} width="60%" />
+        </Box>
     );
-    }
 
-    if (err) return <Alert severity="error" action={
-    <Button color="inherit" size="small" onClick={() => navigate(0)}>Tentar</Button>
-    }>{err}</Alert>;
+    if (error) return (
+        <Box sx={{ maxWidth: 800, mx: "auto", py: 4 }}>
+            <Alert severity="error">{error}</Alert>
+        </Box>
+    );
 
-    if (!event) return <Alert severity="info">Evento não encontrado.</Alert>;
+    const capacityPct = Math.min((0 / event.capacity) * 100, 100); // 0 inscritos por agora
 
     return (
-    <>
-        <Paper sx={{ p: 3 }}>
-        <Stack direction="row" justifyContent="space-between" alignItems="start" gap={2}>
-            <div>
-            <Typography variant="h5" gutterBottom>{event.title}</Typography>
-            <Typography variant="body2" color="text.secondary">{event.location}</Typography>
-            <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: "wrap" }}>
-                {startLabel && <Chip label={`Início: ${startLabel}`} />}
-                {endLabel && <Chip label={`Fim: ${endLabel}`} />}
-            </Stack>
-            </div>
+        <Box sx={{ maxWidth: 800, mx: "auto", py: 4, px: { xs: 2, md: 0 } }}>
 
-            <Stack direction="row" spacing={1}>
-            <Button variant="text" onClick={() => navigate(-1)}>Voltar</Button>
+            {/* Back */}
             <Button
-                variant="contained"
-                onClick={handleJoin}
-                disabled={joining || isParticipant}
+                startIcon={<ArrowBack />} onClick={() => navigate("/events")}
+                sx={{ color: "#1B4332", mb: 3, fontWeight: 500 }}
             >
-                {isParticipant ? "Inscrito" : (joining ? "A inscrever..." : "Participar")}
+                Voltar aos eventos
             </Button>
-            </Stack>
-        </Stack>
 
-        <Divider sx={{ my: 2 }} />
-        <Typography sx={{ whiteSpace: "pre-wrap" }}>
-            {event.description || "Sem descrição."}
-        </Typography>
+            {/* Imagem */}
+            <Box sx={{
+                borderRadius: "20px", overflow: "hidden",
+                height: { xs: 220, md: 380 }, mb: 4,
+                boxShadow: "0 8px 32px rgba(27,67,50,0.15)",
+            }}>
+                <img
+                    src={event.imageUrl || "https://images.unsplash.com/photo-1593113598332-cd288d649433?w=900&q=80"}
+                    alt={event.title}
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+            </Box>
 
-        <Stack direction="row" justifyContent="space-between" alignItems="start" gap={2}>
-            <button onClick={()=>onDelete(id)}>Eliminar</button>
-            <button onClick={()=>navigate(`/events/${e.id}/edit`)}>Editar</button>
-        </Stack>
-        </Paper>
+            {/* Conteúdo */}
+            <Box sx={{
+                backgroundColor: "#fff", borderRadius: "20px",
+                p: { xs: 3, md: 4 },
+                boxShadow: "0 2px 16px rgba(27,67,50,0.07)",
+            }}>
+                {/* Tipo */}
+                {event.type && (
+                    <Chip
+                        label={TYPE_LABELS[event.type] || event.type}
+                        size="small"
+                        sx={{
+                            mb: 2, fontWeight: 600,
+                            backgroundColor: "#1B433215",
+                            color: "#1B4332",
+                        }}
+                    />
+                )}
 
-        <Snackbar
-        open={!!snack}
-        autoHideDuration={2500}
-        onClose={() => setSnack("")}
-        message={snack}
-        />
-    </>
+                {/* Título */}
+                <Typography sx={{
+                    fontFamily: "'Playfair Display', serif",
+                    fontSize: { xs: "1.8rem", md: "2.2rem" },
+                    fontWeight: 700, color: "#1A1A1A", mb: 3, lineHeight: 1.2,
+                }}>
+                    {event.title}
+                </Typography>
+
+                {/* Metainfo */}
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, mb: 3 }}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+                        <Box sx={{
+                            width: 36, height: 36, borderRadius: "10px",
+                            backgroundColor: "#1B433312",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                        }}>
+                            <LocationOn sx={{ color: "#1B4332", fontSize: 18 }} />
+                        </Box>
+                        <Typography sx={{ color: "#1A1A1A", fontWeight: 500 }}>
+                            {event.location}
+                        </Typography>
+                    </Box>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+                        <Box sx={{
+                            width: 36, height: 36, borderRadius: "10px",
+                            backgroundColor: "#1B433312",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                        }}>
+                            <CalendarToday sx={{ color: "#1B4332", fontSize: 18 }} />
+                        </Box>
+                        <Box>
+                            <Typography sx={{ color: "#1A1A1A", fontWeight: 500 }}>
+                                {formatDateTime(event.startDate)}
+                            </Typography>
+                            {event.endDate && (
+                                <Typography sx={{ color: "#4A5568", fontSize: "0.85rem" }}>
+                                    até {formatDateTime(event.endDate)}
+                                </Typography>
+                            )}
+                        </Box>
+                    </Box>
+                </Box>
+
+                {/* Capacidade */}
+                <Box sx={{
+                    backgroundColor: "#F8F3E6", borderRadius: "14px",
+                    p: 2.5, mb: 3,
+                }}>
+                    <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5 }}>
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                            <People sx={{ color: "#1B4332", fontSize: 20 }} />
+                            <Typography sx={{ fontWeight: 600, color: "#1A1A1A" }}>
+                                Vagas disponíveis
+                            </Typography>
+                        </Box>
+                        <Typography sx={{ fontWeight: 700, color: "#1B4332", fontSize: "1.1rem" }}>
+                            {event.capacity - 0} / {event.capacity}
+                        </Typography>
+                    </Box>
+                    <LinearProgress
+                        variant="determinate"
+                        value={capacityPct}
+                        sx={{
+                            height: 8, borderRadius: 4,
+                            backgroundColor: "#1B433220",
+                            "& .MuiLinearProgress-bar": {
+                                backgroundColor: capacityPct >= 90 ? "#E53E3E" : "#52B788",
+                                borderRadius: 4,
+                            },
+                        }}
+                    />
+                    <Typography sx={{ fontSize: "0.8rem", color: "#4A5568", mt: 0.8 }}>
+                        {capacityPct === 100 ? "Sem vagas disponíveis" : `${event.capacity - 0} lugares livres`}
+                    </Typography>
+                </Box>
+
+                {/* Descrição */}
+                {event.description && (
+                    <Box sx={{ mb: 4 }}>
+                        <Typography sx={{
+                            fontFamily: "'Playfair Display', serif",
+                            fontWeight: 600, fontSize: "1.1rem",
+                            color: "#1A1A1A", mb: 1.5,
+                        }}>
+                            Sobre este evento
+                        </Typography>
+                        <Typography sx={{
+                            color: "#4A5568", lineHeight: 1.8, fontSize: "1rem",
+                            whiteSpace: "pre-line",
+                        }}>
+                            {event.description}
+                        </Typography>
+                    </Box>
+                )}
+
+                {/* Botão subscrever */}
+                <Button
+                    variant={subscribed ? "outlined" : "contained"}
+                    size="large" fullWidth
+                    startIcon={subscribed ? <BookmarkAdded /> : <BookmarkAdd />}
+                    onClick={() => setSubscribed(!subscribed)}
+                    sx={{
+                        py: 1.6, fontSize: "1rem", fontWeight: 600,
+                        ...(subscribed ? {
+                            color: "#1B4332", borderColor: "#1B4332",
+                            "&:hover": { backgroundColor: "#1B433310" },
+                        } : {
+                            backgroundColor: "#1B4332",
+                            "&:hover": { backgroundColor: "#0A2318" },
+                        }),
+                    }}
+                >
+                    {subscribed ? "Inscrito ✓" : "Inscrever-me neste evento"}
+                </Button>
+            </Box>
+        </Box>
     );
 }

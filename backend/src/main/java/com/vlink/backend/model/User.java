@@ -26,9 +26,13 @@ public class User {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Role role = Role.VOLUNTEER;
+    
+    //Password, NOT NULL
+    @Column(nullable=false)
+    private String password;
 
     public enum Role {
-        VOLUNTEER, ORGANIZER
+        VOLUNTEER, PROMOTER
     }    
     
 }
