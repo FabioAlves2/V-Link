@@ -5,7 +5,7 @@ import {
   CardContent, CardActionArea, Chip, InputAdornment, Button
 } from "@mui/material";
 import { Search, LocationOn, CalendarToday, FilterList } from "@mui/icons-material";
-import api from "../api/axiosConfig";
+import { getEvents } from "../api/event";
 
 const TYPE_OPTIONS = [
   { value: "", label: "Todos os tipos" },
@@ -43,7 +43,7 @@ export default function EventList() {
       if (filters.location) params.location = filters.location;
       if (filters.date) params.date = filters.date;
       if (filters.type) params.type = filters.type;
-      const { data } = await api.get("/events", { params });
+      const { data } = await getEvents(params);
       setEvents(data);
     } catch (e) {
       console.error("Erro ao buscar eventos:", e);

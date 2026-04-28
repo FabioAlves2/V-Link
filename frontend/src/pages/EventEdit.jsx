@@ -4,12 +4,12 @@ import {
   Paper, Typography, TextField, Stack, Button, Alert
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
-import api from "../api/axiosConfig";
+import { updateEvent } from "../api/event";
 
 export default function CreateEvent() {
   const navigate = useNavigate();
   const [form, setForm] = useState(
-    api.get("/events/:id")
+    updateEvent("/events/:id")
   );
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -26,7 +26,7 @@ export default function CreateEvent() {
     const toISO = (v) => (v ? new Date(v).toISOString() : null);
 
     try {
-      await api.put("/events", {
+      await updateEvent("/events/:id", {
         title: form.title.trim(),
         location: form.location.trim(),
         description: form.description.trim(),

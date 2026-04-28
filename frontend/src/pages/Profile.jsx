@@ -4,7 +4,7 @@ import {
     Avatar, Divider, Chip, CircularProgress
 } from "@mui/material";
 import { Person, Lock, Check } from "@mui/icons-material";
-import api from "../api/axiosConfig";
+import { getMe, updateMe } from "../api/user";
 import { useAuth } from "../context/authContext";
 import { UNSAFE_ErrorResponseImpl } from "react-router-dom";
 
@@ -24,7 +24,7 @@ export default function Profile() {
     const ROLE_COLORS = { VOLUNTEER: "#52B788", PROMOTER: "#D4A853" };
 
     useEffect(() => {
-        api.get("/auth/me")
+        getMe()
             .then(({ data }) => {
                 setUser(data);
                 setNameForm({ name: data.name });
@@ -41,11 +41,11 @@ export default function Profile() {
         setNameSaving(true);
         setNameMsg(null);
         try {
-            const { data } = await api.put("/auth/me", { name: nameForm.name });
+            const { data } = await updateMe({ name: nameForm.name });
             setUser(data);
             setNameMsg({ type: "success", text: "Nome atualizado com sucesso." });
         } catch {
-            setNameMsg({ type: "error", text: "Erro ao atualizar o nome." });
+            setNameMsg({ type: "error", text: "Não foi possível atualizar o nome. Tenta novamente." });
         } finally {
             setNameSaving(false);
         }
@@ -64,11 +64,11 @@ export default function Profile() {
         setPassSaving(true);
         setPassMsg(null);
         try {
-            await api.put("/auth/me", { password: passForm.password });
+            await updateMe({ password: passForm.password });
             setPassForm({ password: "", confirm: "" });
             setPassMsg({ type: "success", text: "Password alterada com sucesso." });
         } catch {
-            setPassMsg({ type: "error", text: "Erro ao alterar a password." });
+            setPassMsg({ type: "error", text: "Não foi possível alterar a password. Tenta novamente." });
         } finally {
             setPassSaving(false);
         }
@@ -234,19 +234,3 @@ const fieldStyle = {
     },
     "& .MuiInputLabel-root.Mui-focused": { color: "#1B4332" },
 };
-
-
-coisas a corrigir:
-1. tenho um user, usercontroller e UNSAFE_ErrorResponseImpl, não seria melhor usar isso do que usar AuthenticatorAssertionResponse, da me a tua opinião e faz como achares melhor
-2. seguindo o mesmo padrao de ha pouco inves de usar api.get criar um js de user que faça a chamada
-import api from "./axiosConfig";
-
-export const login = (credentials) => api.post("/auth/login", credentials);
-export const register = (userData) => api.post("/auth/register", userData);
-export const refreshToken = () =>
-    api.post("/auth/refresh", {
-        refreshToken: localStorage.getItem("refreshToken"),
-    });
-
-3.ao criar um evento nao deve permitir escolher a data e hora anterior a de now, a data de termino nao pode ser antes da data de inicio.estas validaçoes devem ser feitas no frontend, mas no backend também.
-sempre com mensagens de erro amigaveis.

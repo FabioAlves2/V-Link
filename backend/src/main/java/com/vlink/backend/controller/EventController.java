@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/events")
@@ -41,14 +42,18 @@ public class EventController {
 
     // POST /events  (só PROMOTER)
     @PostMapping
-    public ResponseEntity<Event> create(@RequestBody Event event) {
-        event.setStatus(Event.Status.PUBLISHED);
-        return ResponseEntity.status(HttpStatus.CREATED).body(repo.save(event));
+    public ResponseEntity<?> create(@RequestBody Event event) {
+        try {
+            event.setStatus(Event.Status.PUBLISHED);
+            return ResponseEntity.status(HttpStatus.CREATED).body(repo.save(event));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     // PUT /events/{id}  (só PROMOTER)
     @PutMapping("/{id}")
-    public ResponseEntity<Event> update(@PathVariable Long id, @RequestBody Event updated) {
+    public ResponseEntity<?> update(@PathVariable Long id, @RequestBody Event updated) {
         return repo.findById(id).map(e -> {
             e.setTitle(updated.getTitle());
             e.setDescription(updated.getDescription());
@@ -59,7 +64,11 @@ public class EventController {
             e.setType(updated.getType());
             e.setImageUrl(updated.getImageUrl());
             e.setStatus(updated.getStatus());
-            return ResponseEntity.ok(repo.save(e));
+            try {
+                return ResponseEntity.ok(repo.save(e));
+            } catch (IllegalArgumentException ex) {
+                return ResponseEntity.badRequest().body(Map.of("error", ex.getMessage()));
+            }
         }).orElse(ResponseEntity.notFound().build());
     }
 }

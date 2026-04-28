@@ -11,6 +11,8 @@ import Event from "./pages/Event";
 import EventList from "./pages/EventList";
 import CreateEvent from "./pages/CreateEvent";
 import EventEdit from "./pages/EventEdit";
+import MySubscriptions from "./pages/MySubscriptions";
+import Profile from "./pages/Profile";
 
 import { AuthProvider, useAuth } from "./context/authContext";
 
@@ -81,6 +83,8 @@ ReactDOM.createRoot(document.getElementById("root")).render(
               {/* Voluntário + Promotor */}
               <Route path="events" element={<ProtectedRoute><EventList /></ProtectedRoute>} />
               <Route path="events/:id" element={<ProtectedRoute><Event /></ProtectedRoute>} />
+              <Route path="profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+              <Route path="subscriptions" element={<ProtectedRoute><MySubscriptions /></ProtectedRoute>} />
 
               {/* Só Promotor */}
               <Route path="new" element={

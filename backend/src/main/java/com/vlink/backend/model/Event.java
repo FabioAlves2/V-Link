@@ -23,7 +23,10 @@ public class Event {
     @Column(nullable = false)
     private int capacity = 1;
 
+    @Column(nullable = false)
     private LocalDateTime startDate;
+
+    @Column(nullable = false)
     private LocalDateTime endDate;
 
     @Column(length = 500)
@@ -40,4 +43,14 @@ public class Event {
     public enum Status { DRAFT, PUBLISHED, CLOSED }
 
     public enum Type { LIMPEZA, DOACAO, EDUCACAO, AMBIENTE, SOCIAL, OUTRO }
+
+    //Validation of dates
+    @PrePersist
+    @PreUpdate
+    private void validateDates() {
+        if (startDate != null && startDate.isBefore(LocalDateTime.now()))
+            throw new IllegalArgumentException("A data de início não pode ser no passado.");
+        if (startDate != null && endDate != null && endDate.isBefore(startDate))
+            throw new IllegalArgumentException("A data de fim não pode ser anterior à data de início.");
+    }
 }

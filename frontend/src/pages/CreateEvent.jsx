@@ -4,7 +4,7 @@ import {
   Alert, Stack, MenuItem, InputAdornment
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
-import api from "../api/axiosConfig";
+import { createEvent } from "../api/event";
 
 const TYPE_OPTIONS = [
   { value: "LIMPEZA", label: "🧹 Limpeza" },
@@ -28,21 +28,43 @@ export default function CreateEvent() {
   const set = (field) => (e) =>
     setForm(f => ({ ...f, [field]: e.target.value }));
 
+  const nowISO = new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
+    .toISOString().slice(0, 16);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErr(null);
+
+    const now = new Date();
+    const start = form.startDate ? new Date(form.startDate) : null;
+    const end = form.endDate ? new Date(form.endDate) : null;
+
+    if (!start) {
+      setErr("A data de início é obrigatória.");
+      return;
+    }
+    if (start < now) {
+      setErr("A data de início não pode ser no passado.");
+      return;
+    }
+    if (end && end <= start) {
+      setErr("A data de fim tem de ser posterior à data de início.");
+      return;
+    }
+
     setLoading(true);
     const toISO = (v) => v ? new Date(v).toISOString() : null;
     try {
-      await api.post("/events", {
+      await createEvent({
         ...form,
         capacity: Number(form.capacity),
         startDate: toISO(form.startDate),
         endDate: toISO(form.endDate),
       });
       navigate("/events");
-    } catch {
-      setErr("Não foi possível criar o evento. Verifica os campos.");
+    } catch (e) {
+      const msg = e.response?.data?.error;
+      setErr(msg || "Não foi possível criar o evento. Verifica os campos.");
     } finally {
       setLoading(false);
     }
@@ -104,14 +126,24 @@ export default function CreateEvent() {
           {/* Datas */}
           <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
             <Box sx={{ flex: "1 1 200px", minWidth: 0 }}>
-              <TextField label="Data de início" type="datetime-local" fullWidth
-                value={form.startDate} onChange={set("startDate")}
-                InputLabelProps={{ shrink: true }} sx={fieldStyle} />
+              <TextField
+                label="Data de início" type="datetime-local" fullWidth required
+                value={form.startDate}
+                onChange={set("startDate")}
+                inputProps={{ min: nowISO }}
+                InputLabelProps={{ shrink: true }}
+                sx={fieldStyle}
+              />
             </Box>
             <Box sx={{ flex: "1 1 200px", minWidth: 0 }}>
-              <TextField label="Data de fim" type="datetime-local" fullWidth
-                value={form.endDate} onChange={set("endDate")}
-                InputLabelProps={{ shrink: true }} sx={fieldStyle} />
+              <TextField
+                label="Data de fim" type="datetime-local" fullWidth
+                value={form.endDate}
+                onChange={set("endDate")}
+                inputProps={{ min: form.startDate || nowISO }}
+                InputLabelProps={{ shrink: true }}
+                sx={fieldStyle}
+              />
             </Box>
           </Box>
 

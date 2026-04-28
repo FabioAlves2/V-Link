@@ -4,7 +4,7 @@ import {
     AppBar, Toolbar, Typography, Button, Box,
     IconButton, Menu, MenuItem, Avatar, Divider, Chip
 } from "@mui/material";
-import { KeyboardArrowDown, Logout, AddCircleOutline } from "@mui/icons-material";
+import { KeyboardArrowDown, Logout, AddCircleOutline, Person } from "@mui/icons-material";
 import { useAuth } from "../context/authContext";
 
 const roleLabel = { VOLUNTEER: "Voluntário", PROMOTER: "Promotor" };
@@ -53,6 +53,18 @@ export default function Navbar() {
                         }}
                     >
                         Eventos
+                    </Button>
+
+                    <Button
+                        component={Link} to="/subscriptions"
+                        sx={{
+                            color: isActive("/subscriptions") ? "#52B788" : "rgba(255,255,255,0.75)",
+                            fontWeight: isActive("/subscriptions") ? 600 : 400,
+                            fontSize: "0.95rem",
+                            "&:hover": { color: "#F8F3E6", backgroundColor: "rgba(255,255,255,0.08)" },
+                        }}
+                    >
+                        As minhas inscrições
                     </Button>
 
                     {/* Só visível para PROMOTER */}
@@ -129,6 +141,15 @@ export default function Navbar() {
                             {roleLabel[role] || role}
                         </Typography>
                     </Box>
+                    <Divider />
+                    <MenuItem
+                        component={Link} to="/profile"
+                        onClick={() => setAnchorEl(null)}
+                        sx={{ gap: 1.5, py: 1.5 }}
+                    >
+                        <Person fontSize="small" />
+                        O meu perfil
+                    </MenuItem>
                     <Divider />
                     <MenuItem
                         onClick={() => { logout(); navigate("/"); setAnchorEl(null); }}

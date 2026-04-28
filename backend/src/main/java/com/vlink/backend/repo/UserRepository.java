@@ -3,9 +3,9 @@ package com.vlink.backend.repo;
 import com.vlink.backend.model.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Optional;
 
-//Give the generic the Entity and the Primary Key
-//This generates generic queries like findAll, save, delete, count
-public interface UserRepository extends JpaRepository<User, Long> {}
-
-
+public interface UserRepository extends JpaRepository<User, Long> {
+    Optional<User> findByEmail(String email);
+    boolean existsByEmail(String email);
+}

@@ -5,7 +5,8 @@ import {
     Skeleton, Alert
 } from "@mui/material";
 import { LocationOn, CalendarToday, People, ArrowBack, BookmarkAdd, BookmarkAdded } from "@mui/icons-material";
-import api from "../api/axiosConfig";
+import { isSubscribed, subscribe, unsubscribe } from "../api/user";
+import { getEvent } from "../api/event";
 
 const TYPE_LABELS = {
     LIMPEZA: "🧹 Limpeza", DOACAO: "🎁 Doação",
@@ -28,13 +29,39 @@ export default function Event() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [subscribed, setSubscribed] = useState(false);
+    const [subLoading, setSubLoading] = useState(false);
 
+    //Carrega evento e verifica se o utilizador está inscrito
     useEffect(() => {
-        api.get(`/events/${id}`)
+        if (!id) return;
+        getEvent(id)
             .then(({ data }) => setEvent(data))
             .catch(() => setError("Evento não encontrado."))
             .finally(() => setLoading(false));
+
+        isSubscribed(id)
+            .then(({ data }) => setSubscribed(data.subscribed))
+            .catch(() => { });
     }, [id]);
+
+
+    //Subscrever/Cancelar inscrição
+    const handleSubscribe = async () => {
+        setSubLoading(true);
+        try {
+            if (subscribed) {
+                await unsubscribe(id);
+                setSubscribed(false);
+            } else {
+                await subscribe(id);
+                setSubscribed(true);
+            }
+        } catch {
+            // silencioso por agora
+        } finally {
+            setSubLoading(false);
+        }
+    };
 
     if (loading) return (
         <Box sx={{ maxWidth: 800, mx: "auto", py: 4 }}>
@@ -196,7 +223,8 @@ export default function Event() {
                     variant={subscribed ? "outlined" : "contained"}
                     size="large" fullWidth
                     startIcon={subscribed ? <BookmarkAdded /> : <BookmarkAdd />}
-                    onClick={() => setSubscribed(!subscribed)}
+                    onClick={handleSubscribe}
+                    disabled={subLoading}
                     sx={{
                         py: 1.6, fontSize: "1rem", fontWeight: 600,
                         ...(subscribed ? {
