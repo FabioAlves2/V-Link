@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 import java.nio.charset.StandardCharsets;
 import java.security.Key;
 import java.util.Date;
+import java.util.UUID;
 
 @Component
 public class JwtUtil {
@@ -38,6 +39,7 @@ public class JwtUtil {
 
     private String buildToken(String email, User.Role role, long ttl, String type) {
         return Jwts.builder()
+            .setId(UUID.randomUUID().toString())
             .setSubject(email)
             .claim("role", role.name())
             .claim("type", type)
@@ -61,6 +63,10 @@ public class JwtUtil {
 
     public String extractRole(String token) {
         return extractClaims(token).get("role", String.class);
+    }
+
+    public String extractJti(String token) {
+        return extractClaims(token).getId();
     }
 
     public boolean isAccessToken(String token) {

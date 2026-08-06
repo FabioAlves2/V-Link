@@ -15,6 +15,12 @@ const TYPE_OPTIONS = [
   { value: "OUTRO", label: "💡 Outro" },
 ];
 
+const STATUS_OPTIONS = [
+  { value: "DRAFT", label: "Rascunho" },
+  { value: "PUBLISHED", label: "Publicado" },
+  { value: "CLOSED", label: "Encerrado" },
+];
+
 // Converte um ISO datetime do backend para o formato aceite por <input type="datetime-local">
 function toLocalInput(iso) {
   if (!iso) return "";
@@ -78,7 +84,8 @@ export default function EventEdit() {
       });
       navigate(`/events/${id}`);
     } catch (e) {
-      const msg = e.response?.data?.error;
+      const errors = e.response?.data?.errors;
+      const msg = errors ? Object.values(errors)[0] : e.response?.data?.error;
       setErr(msg || "Não foi possível guardar as alterações.");
     } finally {
       setLoading(false);
@@ -131,6 +138,14 @@ export default function EventEdit() {
               <TextField select label="Tipo" fullWidth required
                 value={form.type} onChange={set("type")} sx={fieldStyle}>
                 {TYPE_OPTIONS.map(o => (
+                  <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>
+                ))}
+              </TextField>
+            </Box>
+            <Box sx={{ flex: "1 1 140px", minWidth: 0 }}>
+              <TextField select label="Estado" fullWidth required
+                value={form.status} onChange={set("status")} sx={fieldStyle}>
+                {STATUS_OPTIONS.map(o => (
                   <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>
                 ))}
               </TextField>

@@ -1,3 +1,7 @@
 package com.vlink.backend.dto;
 
-public record RefreshRequest(String refreshToken) {}
+import jakarta.validation.constraints.NotBlank;
+
+public record RefreshRequest(
+    @NotBlank(message = "O refresh token não pode estar vazio.") String refreshToken
+) {}

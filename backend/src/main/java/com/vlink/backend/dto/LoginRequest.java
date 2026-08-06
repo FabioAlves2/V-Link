@@ -1,3 +1,8 @@
 package com.vlink.backend.dto;
 
-public record LoginRequest(String email, String password) {}
+import jakarta.validation.constraints.NotBlank;
+
+public record LoginRequest(
+    @NotBlank(message = "O email não pode estar vazio.") String email,
+    @NotBlank(message = "A password não pode estar vazia.") String password
+) {}

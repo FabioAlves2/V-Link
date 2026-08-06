@@ -6,13 +6,20 @@ Development plan for what comes next, past the current MVP. Ordered so each mile
 
 Foundation work before adding more surface area on top of it.
 
-- [ ] Add bean-validation annotations (`@Valid`, `@NotBlank`, `@Size`) on DTOs and `Event`, replacing the ad-hoc `@PrePersist` date checks with proper validation errors
-- [ ] Add a real test suite: backend (`@SpringBootTest`/`MockMvc` for controllers, unit tests for `JwtUtil`/repositories), frontend (Vitest + React Testing Library for at least the auth flow and event list)
-- [ ] Add a `POST /auth/logout` / token-revocation mechanism (tokens currently can't be invalidated early)
-- [ ] Move from `ddl-auto: update` to Flyway migrations (works for both H2 dev and Postgres prod), so schema changes are explicit and reviewable
-- [ ] Add rate-limiting/lockout on `/auth/login` (no brute-force protection today)
-- [ ] Implement the draft/publish workflow properly — event creation currently always forces `PUBLISHED`; add a way for promoters to save a draft and publish later
-- [ ] **Milestone review**: confirm every task above is checked off; re-read the milestone against the current code and note anything that needs to change before moving to Milestone 2
+- [x] Add bean-validation annotations (`@Valid`, `@NotBlank`, `@Size`) on DTOs and `Event`, replacing the ad-hoc `@PrePersist` date checks with proper validation errors
+- [x] Add a real test suite: backend (`@SpringBootTest`/`MockMvc` for controllers, unit tests for `JwtUtil`/repositories), frontend (Vitest + React Testing Library for at least the auth flow and event list)
+- [x] Add a `POST /auth/logout` / token-revocation mechanism (tokens currently can't be invalidated early)
+- [x] Move from `ddl-auto: update` to Flyway migrations (works for both H2 dev and Postgres prod), so schema changes are explicit and reviewable
+- [x] Add rate-limiting/lockout on `/auth/login` (no brute-force protection today)
+- [x] Implement the draft/publish workflow properly — event creation currently always forces `PUBLISHED`; add a way for promoters to save a draft and publish later
+- [x] **Milestone review**: confirm every task above is checked off; re-read the milestone against the current code and note anything that needs to change before moving to Milestone 2
+
+  **Review notes (2026-08-06):** All six tasks shipped and verified (backend: 16 MockMvc/unit tests; frontend: 4 Vitest/RTL tests; manual curl walkthrough of the full draft→publish→subscribe→logout flow against a fresh H2 instance). Implementation choices, scoped down from the broadest possible version of each task:
+  - **Logout** revokes only the refresh token (new `RefreshToken`/`jti` table); the already-issued ≤15-min access token keeps working until natural expiry — no per-request revocation check was added, so `JwtAuthFilter` stays stateless. Full immediate revocation would need a denylist checked on every request.
+  - **Rate limiting** is a hand-rolled in-memory `ConcurrentHashMap` in `LoginAttemptService` (5 failures/15 min per email), not a library — fine for the single-instance deployment target, but won't survive a restart or scale past one instance without moving to something shared (Redis) once Milestone 4's deployment target is decided.
+  - **Draft/publish** has no dedicated UI for a promoter to find their own drafts again — `CreateEvent.jsx` can save as draft or publish directly, and `EventEdit.jsx` can change status, but there's no listing of "my events" yet. That's explicitly Milestone 2's Organizer Dashboard; nothing here needs to change, just noting the dependency.
+  - **Flyway** baseline (`V1__init.sql`) was hand-written to match Hibernate's prior auto-DDL rather than generated, since ddl-auto had to switch to `validate` in the same step — verified by a fresh boot against wiped H2 with no `SchemaManagementException`.
+  - Nothing discovered here changes Milestone 2's scope as written.
 
 ## Milestone 2 — Organizer tools
 

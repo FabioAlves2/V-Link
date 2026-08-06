@@ -71,7 +71,8 @@ export default function Profile() {
             setPassForm({ currentPassword: "", password: "", confirm: "" });
             setPassMsg({ type: "success", text: "Password alterada com sucesso." });
         } catch (err) {
-            const msg = err.response?.data?.error;
+            const data = err.response?.data;
+            const msg = data?.errors ? Object.values(data.errors)[0] : data?.error;
             setPassMsg({ type: "error", text: msg || "Não foi possível alterar a password. Tenta novamente." });
         } finally {
             setPassSaving(false);

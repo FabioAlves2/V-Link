@@ -5,5 +5,5 @@ spring:
     password: vmp
   jpa:
     hibernate:
-      ddl-auto: update   # em produção idealmente usar migrações (Flyway)
+      ddl-auto: validate
     show-sql: false

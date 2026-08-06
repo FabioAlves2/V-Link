@@ -1,4 +1,5 @@
 import { createContext, useContext, useState } from "react";
+import { logout as logoutApi } from "../api/auth";
 
 const AuthContext = createContext();
 
@@ -21,10 +22,18 @@ export function AuthProvider({ children }) {
         setToken(newToken);
     };
 
-    const logout = () => {
+    const logout = async () => {
+        const storedRefreshToken = localStorage.getItem("refreshToken");
         localStorage.removeItem("token");
         localStorage.removeItem("refreshToken");
         setToken(null);
+        if (storedRefreshToken) {
+            try {
+                await logoutApi(storedRefreshToken);
+            } catch {
+                // sessão já limpa do lado do cliente mesmo que o pedido ao servidor falhe
+            }
+        }
     };
 
     return (

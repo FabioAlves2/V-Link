@@ -27,8 +27,10 @@ export default function Login() {
             loginCtx(data.token, data.refreshToken);
             navigate("/events");
         } catch (err) {
-            const msg = err.response?.data;
-            setError(typeof msg === "string" ? msg : "Credenciais inválidas. Tenta novamente.");
+            const data = err.response?.data;
+            const fieldMsg = data?.errors ? Object.values(data.errors)[0] : null;
+            const msg = fieldMsg || (typeof data === "string" ? data : data?.error);
+            setError(msg || "Credenciais inválidas. Tenta novamente.");
             setLoading(false);
         }
     };

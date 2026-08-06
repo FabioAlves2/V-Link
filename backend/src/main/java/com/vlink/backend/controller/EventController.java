@@ -5,6 +5,7 @@ import com.vlink.backend.model.User;
 import com.vlink.backend.repo.EventRepository;
 import com.vlink.backend.repo.SubscriptionRepository;
 import com.vlink.backend.repo.UserRepository;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.*;
@@ -52,21 +53,20 @@ public class EventController {
 
     // POST /events  (só PROMOTER)
     @PostMapping
-    public ResponseEntity<?> create(@RequestBody Event event, Authentication auth) {
-        try {
-            User organizer = userRepo.findByEmail(auth.getName()).orElseThrow();
-            event.setId(null); // impede que um id vindo do cliente transforme isto num update de outro evento
-            event.setOrganizer(organizer);
-            event.setStatus(Event.Status.PUBLISHED);
-            return ResponseEntity.status(HttpStatus.CREATED).body(repo.save(event));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+    public ResponseEntity<?> create(@Valid @RequestBody Event event, Authentication auth) {
+        if (event.getStatus() == Event.Status.CLOSED) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Um evento não pode ser criado já fechado."));
         }
+        User organizer = userRepo.findByEmail(auth.getName()).orElseThrow();
+        event.setId(null); // impede que um id vindo do cliente transforme isto num update de outro evento
+        event.setOrganizer(organizer);
+        event.setStatus(event.getStatus() == Event.Status.PUBLISHED ? Event.Status.PUBLISHED : Event.Status.DRAFT);
+        return ResponseEntity.status(HttpStatus.CREATED).body(withSubscriberCount(repo.save(event)));
     }
 
     // PUT /events/{id}  (só o PROMOTER que criou o evento)
     @PutMapping("/{id}")
-    public ResponseEntity<?> update(@PathVariable Long id, @RequestBody Event updated, Authentication auth) {
+    public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody Event updated, Authentication auth) {
         return repo.findById(id).map(e -> {
             if (!e.getOrganizer().getEmail().equals(auth.getName())) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
@@ -81,11 +81,7 @@ public class EventController {
             e.setType(updated.getType());
             e.setImageUrl(updated.getImageUrl());
             e.setStatus(updated.getStatus());
-            try {
-                return ResponseEntity.ok(repo.save(e));
-            } catch (IllegalArgumentException ex) {
-                return ResponseEntity.badRequest().body(Map.of("error", ex.getMessage()));
-            }
+            return ResponseEntity.ok(withSubscriberCount(repo.save(e)));
         }).orElse(ResponseEntity.notFound().build());
     }
 }

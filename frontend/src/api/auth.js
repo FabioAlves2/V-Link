@@ -6,3 +6,4 @@ export const refreshToken = () =>
     api.post("/auth/refresh", {
         refreshToken: localStorage.getItem("refreshToken"),
     });
+export const logout = (refreshToken) => api.post("/auth/logout", { refreshToken });

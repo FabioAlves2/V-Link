@@ -31,7 +31,7 @@ export default function CreateEvent() {
   const nowISO = new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
     .toISOString().slice(0, 16);
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e, status) => {
     e.preventDefault();
     setErr(null);
 
@@ -52,18 +52,20 @@ export default function CreateEvent() {
       return;
     }
 
-    setLoading(true);
+    setLoading(status);
     const toISO = (v) => v ? new Date(v).toISOString() : null;
     try {
       await createEvent({
         ...form,
+        status,
         capacity: Number(form.capacity),
         startDate: toISO(form.startDate),
         endDate: toISO(form.endDate),
       });
       navigate("/events");
     } catch (e) {
-      const msg = e.response?.data?.error;
+      const errors = e.response?.data?.errors;
+      const msg = errors ? Object.values(errors)[0] : e.response?.data?.error;
       setErr(msg || "Não foi possível criar o evento. Verifica os campos.");
     } finally {
       setLoading(false);
@@ -84,7 +86,7 @@ export default function CreateEvent() {
       </Typography>
 
       <Box
-        component="form" onSubmit={handleSubmit}
+        component="form" onSubmit={(e) => handleSubmit(e, "PUBLISHED")}
         sx={{
           backgroundColor: "#fff", borderRadius: "20px",
           p: { xs: 3, md: 4 },
@@ -172,16 +174,24 @@ export default function CreateEvent() {
           )}
 
           {/* Ações */}
-          <Box sx={{ display: "flex", gap: 2, pt: 1 }}>
+          <Box sx={{ display: "flex", gap: 2, pt: 1, flexWrap: "wrap" }}>
             <Button
               type="submit" variant="contained" size="large"
-              disabled={loading}
+              disabled={!!loading}
               sx={{
                 backgroundColor: "#1B4332", px: 4,
                 "&:hover": { backgroundColor: "#0A2318" },
               }}
             >
-              {loading ? "A criar..." : "Criar evento"}
+              {loading === "PUBLISHED" ? "A publicar..." : "Publicar"}
+            </Button>
+            <Button
+              type="button" variant="outlined" size="large"
+              disabled={!!loading}
+              onClick={(e) => handleSubmit(e, "DRAFT")}
+              sx={{ color: "#1B4332", borderColor: "#1B4332" }}
+            >
+              {loading === "DRAFT" ? "A guardar..." : "Guardar como rascunho"}
             </Button>
             <Button
               variant="outlined" size="large"
