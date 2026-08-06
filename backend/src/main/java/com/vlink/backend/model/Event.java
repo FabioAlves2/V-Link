@@ -40,6 +40,14 @@ public class Event {
     @Column(length = 20)
     private Type type = Type.OUTRO;
 
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "organizer_id", nullable = false)
+    private User organizer;
+
+    // Não persistido — preenchido pelo EventController a partir das subscrições reais
+    @Transient
+    private int subscriberCount = 0;
+
     public enum Status { DRAFT, PUBLISHED, CLOSED }
 
     public enum Type { LIMPEZA, DOACAO, EDUCACAO, AMBIENTE, SOCIAL, OUTRO }

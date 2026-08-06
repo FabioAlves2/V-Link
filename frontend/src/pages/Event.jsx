@@ -30,6 +30,7 @@ export default function Event() {
     const [error, setError] = useState(null);
     const [subscribed, setSubscribed] = useState(false);
     const [subLoading, setSubLoading] = useState(false);
+    const [subError, setSubError] = useState(null);
 
     //Carrega evento e verifica se o utilizador está inscrito
     useEffect(() => {
@@ -48,16 +49,19 @@ export default function Event() {
     //Subscrever/Cancelar inscrição
     const handleSubscribe = async () => {
         setSubLoading(true);
+        setSubError(null);
         try {
             if (subscribed) {
                 await unsubscribe(id);
                 setSubscribed(false);
+                setEvent(ev => ({ ...ev, subscriberCount: Math.max((ev.subscriberCount ?? 0) - 1, 0) }));
             } else {
                 await subscribe(id);
                 setSubscribed(true);
+                setEvent(ev => ({ ...ev, subscriberCount: (ev.subscriberCount ?? 0) + 1 }));
             }
-        } catch {
-            // silencioso por agora
+        } catch (err) {
+            setSubError(err.response?.data?.error || "Não foi possível concluir a operação. Tenta novamente.");
         } finally {
             setSubLoading(false);
         }
@@ -77,7 +81,8 @@ export default function Event() {
         </Box>
     );
 
-    const capacityPct = Math.min((0 / event.capacity) * 100, 100); // 0 inscritos por agora
+    const registered = event.subscriberCount ?? 0;
+    const capacityPct = Math.min((registered / event.capacity) * 100, 100);
 
     return (
         <Box sx={{ maxWidth: 800, mx: "auto", py: 4, px: { xs: 2, md: 0 } }}>
@@ -179,7 +184,7 @@ export default function Event() {
                             </Typography>
                         </Box>
                         <Typography sx={{ fontWeight: 700, color: "#1B4332", fontSize: "1.1rem" }}>
-                            {event.capacity - 0} / {event.capacity}
+                            {event.capacity - registered} / {event.capacity}
                         </Typography>
                     </Box>
                     <LinearProgress
@@ -195,7 +200,7 @@ export default function Event() {
                         }}
                     />
                     <Typography sx={{ fontSize: "0.8rem", color: "#4A5568", mt: 0.8 }}>
-                        {capacityPct === 100 ? "Sem vagas disponíveis" : `${event.capacity - 0} lugares livres`}
+                        {capacityPct === 100 ? "Sem vagas disponíveis" : `${event.capacity - registered} lugares livres`}
                     </Typography>
                 </Box>
 
@@ -217,6 +222,8 @@ export default function Event() {
                         </Typography>
                     </Box>
                 )}
+
+                {subError && <Alert severity="error" sx={{ mb: 2, borderRadius: "10px" }}>{subError}</Alert>}
 
                 {/* Botão subscrever */}
                 <Button

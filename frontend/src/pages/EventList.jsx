@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Box, Typography, TextField, MenuItem, Card, CardMedia,
@@ -35,8 +35,10 @@ export default function EventList() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ location: "", date: "", type: "" });
+  const latestRequestId = useRef(0);
 
   const fetchEvents = async () => {
+    const requestId = ++latestRequestId.current;
     setLoading(true);
     try {
       const params = {};
@@ -44,15 +46,19 @@ export default function EventList() {
       if (filters.date) params.date = filters.date;
       if (filters.type) params.type = filters.type;
       const { data } = await getEvents(params);
-      setEvents(data);
+      if (requestId === latestRequestId.current) setEvents(data);
     } catch (e) {
       console.error("Erro ao buscar eventos:", e);
     } finally {
-      setLoading(false);
+      if (requestId === latestRequestId.current) setLoading(false);
     }
   };
 
-  useEffect(() => { fetchEvents(); }, [filters]);
+  // Debounce: espera que o utilizador pare de escrever antes de pesquisar
+  useEffect(() => {
+    const timeout = setTimeout(fetchEvents, 400);
+    return () => clearTimeout(timeout);
+  }, [filters]);
 
   const clearFilters = () => {
     setFilters({ location: "", date: "", type: "" });

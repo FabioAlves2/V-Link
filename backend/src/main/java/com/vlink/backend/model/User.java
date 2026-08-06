@@ -1,5 +1,6 @@
 package com.vlink.backend.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -27,7 +28,8 @@ public class User {
     @Column(nullable = false)
     private Role role = Role.VOLUNTEER;
     
-    //Password, NOT NULL
+    //Password, NOT NULL — nunca deve ser devolvida em respostas JSON
+    @JsonIgnore
     @Column(nullable=false)
     private String password;
 

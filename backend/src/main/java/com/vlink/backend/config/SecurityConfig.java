@@ -36,6 +36,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/events", "/events/**").hasRole("PROMOTER")
                 .requestMatchers(HttpMethod.PUT, "/events/**").hasRole("PROMOTER")
                 .requestMatchers("/auth/me", "/subscriptions/**").authenticated()
+                .requestMatchers("/h2/**", "/h2-console/**").hasRole("PROMOTER")
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)

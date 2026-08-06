@@ -7,24 +7,26 @@ import com.vlink.backend.repo.EventRepository;
 import com.vlink.backend.repo.UserRepository;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.*;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import java.time.LocalDateTime;
 
 //Only going to run when dev profile is active
 @Configuration
 @Profile("dev")
 public class BootSeed {
-    
+
     //If tables are empty, fill with dummy data
     @Bean
-    CommandLineRunner seed(EventRepository events, UserRepository users){
+    CommandLineRunner seed(EventRepository events, UserRepository users, PasswordEncoder passwordEncoder){
         return args -> {
-            if (users.count() == 0){
-                User u = new User();
-                u.setName("Ana Organizer");
-                u.setEmail("ana@demo.pt");
-                u.setPassword("ana123");
-                u.setRole(User.Role.PROMOTER);
-                users.save(u);
+            User organizer = users.findByEmail("ana@demo.pt").orElse(null);
+            if (organizer == null){
+                organizer = new User();
+                organizer.setName("Ana Organizer");
+                organizer.setEmail("ana@demo.pt");
+                organizer.setPassword(passwordEncoder.encode("ana123"));
+                organizer.setRole(User.Role.PROMOTER);
+                users.save(organizer);
             }
             if (events.count()==0){
                 Event e = new Event();
@@ -35,6 +37,7 @@ public class BootSeed {
                 e.setEndDate(LocalDateTime.now().plusDays(7).plusHours(3));
                 e.setCapacity(50);
                 e.setStatus(Event.Status.PUBLISHED);
+                e.setOrganizer(organizer);
                 events.save(e);
             }
         };

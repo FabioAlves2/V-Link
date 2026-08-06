@@ -29,17 +29,18 @@ public class JwtUtil {
     }
 
     public String generateToken(String email, User.Role role) {
-        return buildToken(email, role, expiration);
+        return buildToken(email, role, expiration, "access");
     }
 
     public String generateRefreshToken(String email, User.Role role) {
-        return buildToken(email, role, refreshExpiration);
+        return buildToken(email, role, refreshExpiration, "refresh");
     }
 
-    private String buildToken(String email, User.Role role, long ttl) {
+    private String buildToken(String email, User.Role role, long ttl, String type) {
         return Jwts.builder()
             .setSubject(email)
             .claim("role", role.name())
+            .claim("type", type)
             .setIssuedAt(new Date())
             .setExpiration(new Date(System.currentTimeMillis() + ttl))
             .signWith(getSigningKey(), SignatureAlgorithm.HS256)
@@ -60,6 +61,14 @@ public class JwtUtil {
 
     public String extractRole(String token) {
         return extractClaims(token).get("role", String.class);
+    }
+
+    public boolean isAccessToken(String token) {
+        return "access".equals(extractClaims(token).get("type", String.class));
+    }
+
+    public boolean isRefreshToken(String token) {
+        return "refresh".equals(extractClaims(token).get("type", String.class));
     }
 
     public boolean isTokenValid(String token) {

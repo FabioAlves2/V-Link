@@ -128,31 +128,25 @@ export default function MySubscriptions() {
                                     opacity: status === "passado" ? 0.75 : 1,
                                 }}
                             >
-                                <CardActionArea
-                                    onClick={() => navigate(`/events/${event.id}`)}
-                                    sx={{ display: "flex", alignItems: "stretch", p: 0 }}
-                                >
-                                    {/* Imagem lateral */}
-                                    <CardMedia
-                                        component="img"
-                                        image={event.imageUrl || "https://images.unsplash.com/photo-1593113598332-cd288d649433?w=400&q=70"}
-                                        alt={event.title}
-                                        sx={{
-                                            width: { xs: 90, sm: 140 },
-                                            flexShrink: 0,
-                                            objectFit: "cover",
-                                        }}
-                                    />
+                                <Box sx={{ display: "flex", alignItems: "stretch" }}>
+                                    <CardActionArea
+                                        onClick={() => navigate(`/events/${event.id}`)}
+                                        sx={{ display: "flex", alignItems: "stretch", flex: 1, p: 0, minWidth: 0 }}
+                                    >
+                                        {/* Imagem lateral */}
+                                        <CardMedia
+                                            component="img"
+                                            image={event.imageUrl || "https://images.unsplash.com/photo-1593113598332-cd288d649433?w=400&q=70"}
+                                            alt={event.title}
+                                            sx={{
+                                                width: { xs: 90, sm: 140 },
+                                                flexShrink: 0,
+                                                objectFit: "cover",
+                                            }}
+                                        />
 
-                                    {/* Conteúdo */}
-                                    <CardContent sx={{
-                                        flex: 1, p: { xs: 2, sm: 2.5 },
-                                        display: "flex",
-                                        justifyContent: "space-between",
-                                        alignItems: "center",
-                                        flexWrap: "wrap", gap: 1,
-                                    }}>
-                                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                                        {/* Conteúdo */}
+                                        <CardContent sx={{ flex: 1, p: { xs: 2, sm: 2.5 }, minWidth: 0 }}>
                                             {/* Status */}
                                             <Chip
                                                 label={status}
@@ -189,10 +183,12 @@ export default function MySubscriptions() {
                                                     </Typography>
                                                 </Box>
                                             </Box>
-                                        </Box>
+                                        </CardContent>
+                                    </CardActionArea>
 
-                                        {/* Botão cancelar */}
-                                        {status !== "passado" && (
+                                    {/* Botão cancelar — fora da CardActionArea para não aninhar <button> dentro de <button> */}
+                                    {status !== "passado" && (
+                                        <Box sx={{ display: "flex", alignItems: "center", px: { xs: 2, sm: 2.5 } }}>
                                             <Button
                                                 variant="outlined" size="small"
                                                 startIcon={removing === event.id
@@ -212,9 +208,9 @@ export default function MySubscriptions() {
                                             >
                                                 Cancelar
                                             </Button>
-                                        )}
-                                    </CardContent>
-                                </CardActionArea>
+                                        </Box>
+                                    )}
+                                </Box>
                             </Card>
                         );
                     })}

@@ -6,7 +6,6 @@ import {
 import { Person, Lock, Check } from "@mui/icons-material";
 import { getMe, updateMe } from "../api/user";
 import { useAuth } from "../context/authContext";
-import { UNSAFE_ErrorResponseImpl } from "react-router-dom";
 
 export default function Profile() {
     const { role } = useAuth();
@@ -14,7 +13,7 @@ export default function Profile() {
     const [loading, setLoading] = useState(true);
 
     const [nameForm, setNameForm] = useState({ name: "" });
-    const [passForm, setPassForm] = useState({ password: "", confirm: "" });
+    const [passForm, setPassForm] = useState({ currentPassword: "", password: "", confirm: "" });
     const [nameMsg, setNameMsg] = useState(null);
     const [passMsg, setPassMsg] = useState(null);
     const [nameSaving, setNameSaving] = useState(false);
@@ -53,6 +52,10 @@ export default function Profile() {
 
     const savePassword = async (e) => {
         e.preventDefault();
+        if (!passForm.currentPassword) {
+            setPassMsg({ type: "error", text: "Introduz a tua password atual." });
+            return;
+        }
         if (passForm.password.length < 6) {
             setPassMsg({ type: "error", text: "A password deve ter pelo menos 6 caracteres." });
             return;
@@ -64,11 +67,12 @@ export default function Profile() {
         setPassSaving(true);
         setPassMsg(null);
         try {
-            await updateMe({ password: passForm.password });
-            setPassForm({ password: "", confirm: "" });
+            await updateMe({ currentPassword: passForm.currentPassword, password: passForm.password });
+            setPassForm({ currentPassword: "", password: "", confirm: "" });
             setPassMsg({ type: "success", text: "Password alterada com sucesso." });
-        } catch {
-            setPassMsg({ type: "error", text: "Não foi possível alterar a password. Tenta novamente." });
+        } catch (err) {
+            const msg = err.response?.data?.error;
+            setPassMsg({ type: "error", text: msg || "Não foi possível alterar a password. Tenta novamente." });
         } finally {
             setPassSaving(false);
         }
@@ -198,6 +202,12 @@ export default function Profile() {
                 )}
 
                 <Box component="form" onSubmit={savePassword} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    <TextField
+                        label="Password atual" type="password" fullWidth
+                        value={passForm.currentPassword}
+                        onChange={(e) => setPassForm(f => ({ ...f, currentPassword: e.target.value }))}
+                        sx={fieldStyle}
+                    />
                     <TextField
                         label="Nova password" type="password" fullWidth
                         value={passForm.password}

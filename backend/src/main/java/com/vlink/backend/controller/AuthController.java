@@ -52,7 +52,7 @@ public class AuthController {
 
     @PostMapping("/refresh")
     public ResponseEntity<?> refresh(@RequestBody RefreshRequest req) {
-        if (!jwtUtil.isTokenValid(req.refreshToken()))
+        if (!jwtUtil.isTokenValid(req.refreshToken()) || !jwtUtil.isRefreshToken(req.refreshToken()))
             return ResponseEntity.status(401).body(Map.of("error", "Sessão expirada. Faz login novamente."));
 
         String email = jwtUtil.extractEmail(req.refreshToken());
@@ -82,8 +82,12 @@ public class AuthController {
             .map(u -> {
                 if (req.name() != null && !req.name().isBlank())
                     u.setName(req.name());
-                if (req.password() != null && !req.password().isBlank())
+                if (req.password() != null && !req.password().isBlank()) {
+                    if (req.currentPassword() == null || !passwordEncoder.matches(req.currentPassword(), u.getPassword())) {
+                        return ResponseEntity.status(401).body(Map.of("error", "Password atual incorreta."));
+                    }
                     u.setPassword(passwordEncoder.encode(req.password()));
+                }
                 userRepository.save(u);
                 return ResponseEntity.ok(Map.of(
                     "name",  u.getName(),
