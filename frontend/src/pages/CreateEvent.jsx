@@ -4,7 +4,7 @@ import {
   Alert, Stack, MenuItem, InputAdornment
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
-import { createEvent } from "../api/event";
+import { createEvent, uploadEventImage } from "../api/event";
 
 const TYPE_OPTIONS = [
   { value: "LIMPEZA", label: "🧹 Limpeza" },
@@ -24,9 +24,24 @@ export default function CreateEvent() {
   });
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
 
   const set = (field) => (e) =>
     setForm(f => ({ ...f, [field]: e.target.value }));
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
+  // Revoga o blob URL anterior sempre que é substituído por um novo, e ao desmontar —
+  // sem isto, escolher várias imagens antes de submeter acumulava URLs nunca libertados.
+  useEffect(() => {
+    return () => { if (imagePreview) URL.revokeObjectURL(imagePreview); };
+  }, [imagePreview]);
 
   const nowISO = new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
     .toISOString().slice(0, 16);
@@ -53,15 +68,23 @@ export default function CreateEvent() {
     }
 
     setLoading(status);
-    const toISO = (v) => v ? new Date(v).toISOString() : null;
+    // O backend guarda startDate/endDate como LocalDateTime (sem timezone) e trata-os
+    // como hora local do servidor — NÃO usar .toISOString() aqui, que converte para UTC
+    // e desalinha a hora (ex.: 15:30 local passa a ser lido como 14:30, "no passado").
+    const toISO = (v) => v ? `${v}:00` : null;
     try {
-      await createEvent({
+      const { data } = await createEvent({
         ...form,
         status,
         capacity: Number(form.capacity),
         startDate: toISO(form.startDate),
         endDate: toISO(form.endDate),
       });
+      // O evento tem de existir antes de podermos associar-lhe uma imagem
+      // (o storage é organizado por eventId) — best-effort, não bloqueia a navegação.
+      if (imageFile) {
+        try { await uploadEventImage(data.id, imageFile); } catch { /* evento já criado, ignora */ }
+      }
       navigate("/events");
     } catch (e) {
       const errors = e.response?.data?.errors;
@@ -153,22 +176,22 @@ export default function CreateEvent() {
           <TextField label="Descrição" fullWidth multiline minRows={4}
             value={form.description} onChange={set("description")} sx={fieldStyle} />
 
-          {/* URL da imagem */}
-          <TextField label="URL da imagem (opcional)" fullWidth
-            value={form.imageUrl} onChange={set("imageUrl")}
-            placeholder="https://exemplo.com/imagem.jpg"
-            sx={fieldStyle} />
+          {/* Imagem */}
+          <Button component="label" variant="outlined"
+            sx={{ color: "#1B4332", borderColor: "#1B4332", alignSelf: "flex-start" }}>
+            {imageFile ? "Trocar imagem" : "Escolher imagem (opcional)"}
+            <input type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={handleFileChange} />
+          </Button>
 
           {/* Preview */}
-          {form.imageUrl && (
+          {imagePreview && (
             <Box sx={{
               borderRadius: "12px", overflow: "hidden",
               height: 200, border: "1px solid #E2E8F0",
             }}>
               <img
-                src={form.imageUrl} alt="Preview"
+                src={imagePreview} alt="Preview"
                 style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                onError={(e) => e.target.style.display = "none"}
               />
             </Box>
           )}

@@ -84,4 +84,17 @@ public class JwtUtil {
             return false;
         }
     }
+
+    // Parse único e reutilizável para JwtAuthFilter — corre em TODOS os pedidos autenticados,
+    // por isso vale a pena evitar repetir a verificação de assinatura 3-4x por pedido
+    // (era o que isTokenValid + isAccessToken + extractEmail + extractRole faziam, cada um
+    // com o seu próprio parseClaimsJws). Devolve null se o token for inválido/expirado.
+    public Claims parseValidClaims(String token) {
+        try {
+            Claims claims = extractClaims(token);
+            return claims.getExpiration().after(new Date()) ? claims : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
 }

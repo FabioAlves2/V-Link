@@ -13,6 +13,8 @@ import CreateEvent from "./pages/CreateEvent";
 import EventEdit from "./pages/EventEdit";
 import MySubscriptions from "./pages/MySubscriptions";
 import Profile from "./pages/Profile";
+import OrganizerDashboard from "./pages/OrganizerDashboard";
+import EventSubscribers from "./pages/EventSubscribers";
 
 import { AuthProvider, useAuth } from "./context/authContext";
 
@@ -95,6 +97,16 @@ ReactDOM.createRoot(document.getElementById("root")).render(
               <Route path="events/:id/edit" element={
                 <ProtectedRoute requiredRole="PROMOTER">
                   <EventEdit />
+                </ProtectedRoute>
+              } />
+              <Route path="dashboard" element={
+                <ProtectedRoute requiredRole="PROMOTER">
+                  <OrganizerDashboard />
+                </ProtectedRoute>
+              } />
+              <Route path="events/:id/subscribers" element={
+                <ProtectedRoute requiredRole="PROMOTER">
+                  <EventSubscribers />
                 </ProtectedRoute>
               } />
             </Route>

@@ -6,6 +6,7 @@ import {
 } from "@mui/material";
 import { Search, LocationOn, CalendarToday, FilterList } from "@mui/icons-material";
 import { getEvents } from "../api/event";
+import { resolveImageUrl } from "../utils/image";
 
 const TYPE_OPTIONS = [
   { value: "", label: "Todos os tipos" },
@@ -165,7 +166,7 @@ export default function EventList() {
                   {/* Imagem */}
                   <CardMedia
                     component="img" height="180"
-                    image={event.imageUrl || `https://images.unsplash.com/photo-1593113598332-cd288d649433?w=600&q=70`}
+                    image={resolveImageUrl(event.imageUrl, "https://images.unsplash.com/photo-1593113598332-cd288d649433?w=600&q=70")}
                     alt={event.title}
                     sx={{ objectFit: "cover" }}
                   />

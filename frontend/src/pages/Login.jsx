@@ -17,11 +17,13 @@ export default function Login() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError(null);
-        setLoading(true);
+
         if (!form.email || !form.password) {
             setError("Preenche todos os campos antes de continuar.");
             return;
         }
+
+        setLoading(true);
         try {
             const { data } = await login({ email: form.email, password: form.password });
             loginCtx(data.token, data.refreshToken);

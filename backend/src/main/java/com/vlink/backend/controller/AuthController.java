@@ -2,12 +2,14 @@ package com.vlink.backend.controller;
 
 import com.vlink.backend.auth.JwtUtil;
 import com.vlink.backend.auth.LoginAttemptService;
+import com.vlink.backend.auth.RegisterAttemptService;
 import com.vlink.backend.dto.*;
 import com.vlink.backend.model.RefreshToken;
 import com.vlink.backend.model.User;
 import com.vlink.backend.repo.RefreshTokenRepository;
 import com.vlink.backend.repo.UserRepository;
 import io.jsonwebtoken.Claims;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -30,6 +32,7 @@ public class AuthController {
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final LoginAttemptService loginAttemptService;
+    private final RegisterAttemptService registerAttemptService;
 
     private void persistRefreshToken(String email, String refreshToken) {
         Claims claims = jwtUtil.extractClaims(refreshToken);
@@ -41,9 +44,16 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest req) {
-        if (userRepository.existsByEmail(req.email()))
+    public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest req, HttpServletRequest httpRequest) {
+        String clientIp = httpRequest.getRemoteAddr();
+        if (registerAttemptService.isBlocked(clientIp)) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .body(Map.of("error", "Demasiadas tentativas. Tenta novamente mais tarde."));
+        }
+        if (userRepository.existsByEmail(req.email())) {
+            registerAttemptService.recordDuplicateAttempt(clientIp);
             return ResponseEntity.badRequest().body("Este email já está registado.");
+        }
 
         User user = new User();
         user.setName(req.name());

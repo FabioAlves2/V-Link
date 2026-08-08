@@ -1,0 +1,2 @@
+ALTER TABLE subscriptions ADD COLUMN checked_in BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE subscriptions ADD COLUMN checked_in_at TIMESTAMP;

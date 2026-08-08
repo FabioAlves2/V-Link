@@ -1,5 +1,6 @@
 package com.vlink.backend.auth;
 
+import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -29,10 +30,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         if (header != null && header.startsWith("Bearer ")) {
             String token = header.substring(7);
+            Claims claims = jwtUtil.parseValidClaims(token);
 
-            if (jwtUtil.isTokenValid(token) && jwtUtil.isAccessToken(token)) {
-                String email = jwtUtil.extractEmail(token);
-                String role  = jwtUtil.extractRole(token);
+            if (claims != null && "access".equals(claims.get("type", String.class))) {
+                String email = claims.getSubject();
+                String role  = claims.get("role", String.class);
 
                 UsernamePasswordAuthenticationToken auth =
                     new UsernamePasswordAuthenticationToken(

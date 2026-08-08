@@ -25,12 +25,32 @@ Foundation work before adding more surface area on top of it.
 
 Promoters currently have no way to manage what they've created beyond the create/edit forms.
 
-- [ ] **New page: Organizer Dashboard** — list of events created by the logged-in promoter, with subscriber counts and quick edit/close links
-- [ ] **New page: Event Subscribers view** — per-event list of volunteers who signed up (name/email), with CSV export
-- [ ] Feature: event image upload (replace the current URL-only field) — needs a storage backend (local disk to start, or S3-compatible later)
-- [ ] Feature: close/cancel an event, notifying already-subscribed volunteers
-- [ ] Feature: attendance/check-in tracking — mark which subscribers actually showed up (foundation for volunteer-hours tracking in Milestone 3)
-- [ ] **Milestone review**: confirm every task above is checked off; re-read the milestone against the current code and note anything that needs to change before moving to Milestone 3
+- [x] **New page: Organizer Dashboard** — list of events created by the logged-in promoter, with subscriber counts and quick edit/close links
+- [x] **New page: Event Subscribers view** — per-event list of volunteers who signed up (name/email), with CSV export
+- [x] Feature: event image upload (replace the current URL-only field) — needs a storage backend (local disk to start, or S3-compatible later)
+- [x] Feature: close/cancel an event, notifying already-subscribed volunteers (in-app notifications — no email infrastructure exists until Milestone 3)
+- [x] Feature: attendance/check-in tracking — mark which subscribers actually showed up (foundation for volunteer-hours tracking in Milestone 3)
+- [x] Seed a subscribed (and checked-in) volunteer in `BootSeed.java`'s dev data, so the dashboard/subscribers/attendance UI have non-empty data to click through on a fresh H2 instance
+- [x] **Milestone review**: confirm every task above is checked off; re-read the milestone against the current code and note anything that needs to change before moving to Milestone 3
+
+  **Review notes (2026-08-07):** All five feature tasks plus the seed-data addition shipped and verified (backend: 20 new/extended MockMvc tests across `EventControllerTest`, `EventSubscriberControllerTest`, `NotificationControllerTest`, `EventImageUploadTest`; frontend: 6 new Vitest/RTL tests; a full Playwright walkthrough against the real dev servers covering dashboard → subscribers → attendance → CSV export → image upload → close → volunteer notification). Implementation choices, scoped down from the broadest possible version of each task:
+  - **Notifications** are a new `Notification`/`is_read` table populated only on a PUBLISHED→CLOSED transition, one row per subscriber — no push/email, just a polled (30s) unread-count badge and dropdown in the Navbar. Still no per-request access-token revocation or any other Milestone-3-adjacent infra was pulled forward.
+  - **Attendance** added `checked_in`/`checked_in_at` to `subscriptions` via `V4__subscription_checkin.sql`. H2 (in `MODE=PostgreSQL`) rejected a single multi-column `ALTER TABLE ... ADD COLUMN a, ADD COLUMN b` statement that Postgres itself would accept — split into two separate `ALTER TABLE` statements for cross-DB safety; worth remembering for any future multi-column migration.
+  - **Image upload** is local-disk only (`app.upload.dir`, default `./uploads`), served publicly via a `/uploads/**` static resource mapping — no auth on the images themselves since the events they belong to are already public data. `EventEdit.jsx` uploads immediately on file selection; `CreateEvent.jsx` defers the upload until after the event is created (needs the id first) as a deliberate two-request sequencing tradeoff.
+  - **CSV export** is fully client-side (`utils/csv.js`, `Blob` + temporary `<a download>`) against the already-fetched subscriber list — no dedicated backend endpoint, since the app's scale doesn't justify one.
+  - **Organizer Dashboard** is a new `GET /events/mine`, scoped server-side to the authenticated promoter's own email, returning all statuses (including drafts) — distinct from the public `GET /events` list, which stays hardcoded to `PUBLISHED` only.
+  - Confirmed the pre-existing logout-redirects-to-`/login`-instead-of-`/` bug (noted in `CLAUDE.md`, predates this milestone) is still present and unrelated to any Milestone 2 change — still not fixed, pending explicit direction.
+  - Nothing discovered here changes Milestone 3's scope as written.
+
+  **Post-milestone fixes (2026-08-07):** A run of user bug reports plus a deliberate use-case sweep reworked the event lifecycle and closed several real gaps, each shipped with tests confirmed to fail without the fix and pass with it:
+  - **Close vs. cancel split.** "Encerrar" was covering two different situations (ending something running vs. something that was never going to happen), which is why the volunteer-facing status chip couldn't reliably tell them apart. Split into "Encerrar" (`PUT status:CLOSED`, only once started, notifies, preserves history permanently) and "Cancelar" (`DELETE /events/{id}`, only for a `DRAFT` or not-yet-started `PUBLISHED` event, hard-deletes + notifies with a self-contained message). `CLOSED` is never deletable.
+  - **Timezone bug.** Frontend submitted dates via `.toISOString()` (UTC) while the backend's `LocalDateTime` fields are server-local wall-clock time — shifted every date an hour early during Portuguese summer time, rejecting near-future events as "past." Fixed by submitting the `datetime-local` value as-is.
+  - **"Passado" (ended but never closed) wasn't handled anywhere.** A `PUBLISHED` event past its `endDate` stayed fully live: publicly listed, subscribable, and its subscriptions (with `checkedIn` history) still cancellable. Added `endDate < now` checks to the public list query, `subscribe`, and `unsubscribe`; `Event.jsx`/`MySubscriptions.jsx` now reflect real status/dates instead of guessing from dates alone.
+  - **Status state machine.** `update()` had no restriction on which status transitions were legal, so a `PUBLISHED`-with-subscribers event could be force-deleted via `PUT status:DRAFT` → `DELETE` (bypassing every timing rule above), and a `CLOSED` event could be reopened the same way. Fixed by forbidding `CLOSED → {DRAFT, PUBLISHED}` and `PUBLISHED → DRAFT` when the event has subscribers (zero-subscriber un-publish stays legal — an earlier unconditional block was a real regression caught in manual testing). `EventEdit.jsx`'s status dropdown mirrors the rule.
+  - **Auth entry point bug.** `SecurityConfig` never set an explicit `authenticationEntryPoint`, so Spring Security's default (`Http403ForbiddenEntryPoint`) returned `403` for any missing/expired/invalid token instead of `401` — silently disabling `axiosConfig.js`'s refresh-on-401 flow for natural token expiry. Found via manual testing (a tab left open long enough for a token to expire); fixed with an explicit `401` entry point. Wrong-role `403`s are a separate, unaffected code path.
+  - Smaller fixes from the same sweep: capacity can't be reduced below the current subscriber count; rescheduling a `PUBLISHED` event's dates now notifies subscribers; re-uploading an event image deletes the previous file instead of orphaning it.
+
+  Nothing here changes Milestone 3's scope.
 
 ## Milestone 3 — Volunteer experience
 

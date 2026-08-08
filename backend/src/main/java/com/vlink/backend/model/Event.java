@@ -47,13 +47,17 @@ public class Event {
     @Column(length = 500)
     private String imageUrl;
 
+    // Sem valor por defeito no campo Java: um default aqui ficaria atribuído ANTES do Jackson
+    // ligar os setters, tornando "omitido no JSON" indistinguível de "igual ao default" e mascarando
+    // silenciosamente um PUT que se esqueceu de enviar o estado. EventController trata o omitido
+    // de forma explícita: create() aceita omissão (== rascunho), update() rejeita-a (400).
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
-    private Status status = Status.DRAFT;
+    private Status status;
 
     @Enumerated(EnumType.STRING)
     @Column(length = 20)
-    private Type type = Type.OUTRO;
+    private Type type;
 
     @ManyToOne(optional = false)
     @JoinColumn(name = "organizer_id", nullable = false)
@@ -62,6 +66,12 @@ public class Event {
     // Não persistido — preenchido pelo EventController a partir das subscrições reais
     @Transient
     private int subscriberCount = 0;
+
+    // Lock otimista: dois PUT concorrentes ao mesmo evento (ex.: duplo clique em "Encerrar")
+    // fariam ambos a mesma transição PUBLISHED→CLOSED e disparavam notificações em duplicado.
+    // O segundo save() a chegar falha com ObjectOptimisticLockingFailureException (ver ApiExceptionHandler).
+    @Version
+    private Long version;
 
     public enum Status { DRAFT, PUBLISHED, CLOSED }
 

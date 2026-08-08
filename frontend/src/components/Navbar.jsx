@@ -1,24 +1,51 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import {
     AppBar, Toolbar, Typography, Button, Box,
-    IconButton, Menu, MenuItem, Avatar, Divider, Chip
+    IconButton, Menu, MenuItem, Avatar, Divider, Chip, Badge
 } from "@mui/material";
-import { KeyboardArrowDown, Logout, AddCircleOutline, Person } from "@mui/icons-material";
+import { KeyboardArrowDown, Logout, Person, NotificationsNone } from "@mui/icons-material";
 import { useAuth } from "../context/authContext";
+import { getNotifications, getUnreadCount, markNotificationRead } from "../api/notification";
 
 const roleLabel = { VOLUNTEER: "Voluntário", PROMOTER: "Promotor" };
 const roleColor = { VOLUNTEER: "#52B788", PROMOTER: "#D4A853" };
+const NOTIFICATIONS_POLL_MS = 30000;
 
 export default function Navbar() {
     const { role, logout, token } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
     const [anchorEl, setAnchorEl] = useState(null);
+    const [notifAnchorEl, setNotifAnchorEl] = useState(null);
+    const [notifications, setNotifications] = useState([]);
+    const [unreadCount, setUnreadCount] = useState(0);
+
+    useEffect(() => {
+        if (!token) return;
+        const poll = () => getUnreadCount().then(({ data }) => setUnreadCount(data.count)).catch(() => {});
+        poll();
+        const interval = setInterval(poll, NOTIFICATIONS_POLL_MS);
+        return () => clearInterval(interval);
+    }, [token]);
 
     if (!token) return null;
 
     const isActive = (path) => location.pathname.startsWith(path);
+
+    const openNotifications = (e) => {
+        setNotifAnchorEl(e.currentTarget);
+        getNotifications().then(({ data }) => setNotifications(data)).catch(() => {});
+    };
+
+    const handleNotificationClick = async (notification) => {
+        setNotifAnchorEl(null);
+        if (!notification.read) {
+            setUnreadCount((c) => Math.max(0, c - 1));
+            markNotificationRead(notification.id).catch(() => {});
+        }
+        if (notification.eventId) navigate(`/events/${notification.eventId}`);
+    };
 
     return (
         <AppBar position="sticky" elevation={0} sx={{
@@ -67,22 +94,71 @@ export default function Navbar() {
                         As minhas inscrições
                     </Button>
 
-                    {/* Só visível para PROMOTER */}
+                    {/* Só visível para PROMOTER — "Criar evento" já está no Painel do organizador */}
                     {role === "PROMOTER" && (
                         <Button
-                            component={Link} to="/new"
-                            startIcon={<AddCircleOutline sx={{ fontSize: "1rem" }} />}
+                            component={Link} to="/dashboard"
                             sx={{
-                                color: isActive("/new") ? "#D4A853" : "rgba(255,255,255,0.75)",
-                                fontWeight: isActive("/new") ? 600 : 400,
+                                color: isActive("/dashboard") ? "#D4A853" : "rgba(255,255,255,0.75)",
+                                fontWeight: isActive("/dashboard") ? 600 : 400,
                                 fontSize: "0.95rem",
                                 "&:hover": { color: "#F8F3E6", backgroundColor: "rgba(255,255,255,0.08)" },
                             }}
                         >
-                            Criar evento
+                            Painel do organizador
                         </Button>
                     )}
                 </Box>
+
+                {/* Notificações */}
+                <IconButton onClick={openNotifications} sx={{ color: "rgba(255,255,255,0.85)", mr: 1 }}>
+                    <Badge badgeContent={unreadCount} color="error" max={9}>
+                        <NotificationsNone />
+                    </Badge>
+                </IconButton>
+
+                <Menu
+                    anchorEl={notifAnchorEl} open={Boolean(notifAnchorEl)}
+                    onClose={() => setNotifAnchorEl(null)}
+                    PaperProps={{
+                        sx: {
+                            borderRadius: "12px", mt: 1,
+                            boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
+                            minWidth: 300, maxWidth: 360, maxHeight: 400,
+                        }
+                    }}
+                    transformOrigin={{ horizontal: "right", vertical: "top" }}
+                    anchorOrigin={{ horizontal: "right", vertical: "bottom" }}
+                >
+                    <Box sx={{ px: 2, py: 1.5 }}>
+                        <Typography sx={{ fontWeight: 600, fontSize: "0.9rem", color: "#1B4332" }}>
+                            Notificações
+                        </Typography>
+                    </Box>
+                    <Divider />
+                    {notifications.length === 0 ? (
+                        <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
+                            <Typography sx={{ fontSize: "0.85rem", color: "#4A5568" }}>
+                                Sem notificações.
+                            </Typography>
+                        </Box>
+                    ) : (
+                        notifications.map((n) => (
+                            <MenuItem
+                                key={n.id}
+                                onClick={() => handleNotificationClick(n)}
+                                sx={{
+                                    py: 1.2, whiteSpace: "normal",
+                                    backgroundColor: n.read ? "transparent" : "#1B433208",
+                                }}
+                            >
+                                <Typography sx={{ fontSize: "0.85rem", color: "#1A1A1A" }}>
+                                    {n.message}
+                                </Typography>
+                            </MenuItem>
+                        ))
+                    )}
+                </Menu>
 
                 {/* Avatar + menu */}
                 <Box

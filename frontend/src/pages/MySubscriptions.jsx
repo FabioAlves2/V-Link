@@ -6,6 +6,7 @@ import {
 } from "@mui/material";
 import { LocationOn, CalendarToday, BookmarkRemove } from "@mui/icons-material";
 import api from "../api/axiosConfig";
+import { resolveImageUrl } from "../utils/image";
 
 function formatDate(dt) {
     if (!dt) return "—";
@@ -15,6 +16,11 @@ function formatDate(dt) {
 }
 
 function getStatus(event) {
+    // "Encerrado" é definitivo independentemente das datas — um evento pode ser encerrado
+    // antes do endDate chegar (só o startDate tem de já ter passado), por isso confiar só nas
+    // datas classificava-o como "a decorrer" e deixava o botão "Cancelar" visível e clicável.
+    if (event.status === "CLOSED") return "encerrado";
+
     const now = new Date();
     if (!event.startDate) return "sem data";
     const start = new Date(event.startDate);
@@ -28,8 +34,11 @@ const STATUS_STYLE = {
     "próximo": { bg: "#1B433315", color: "#1B4332" },
     "a decorrer": { bg: "#52B78820", color: "#16A34A" },
     "passado": { bg: "#6B728015", color: "#6B7280" },
+    "encerrado": { bg: "#6B728015", color: "#6B7280" },
     "sem data": { bg: "#F59E0B15", color: "#B45309" },
 };
+
+const NOT_CANCELLABLE_STATUSES = new Set(["passado", "encerrado"]);
 
 export default function MySubscriptions() {
     const navigate = useNavigate();
@@ -54,8 +63,8 @@ export default function MySubscriptions() {
         try {
             await api.delete(`/subscriptions/${eventId}`);
             setEvents(prev => prev.filter(ev => ev.id !== eventId));
-        } catch {
-            setError("Erro ao cancelar inscrição.");
+        } catch (err) {
+            setError(err.response?.data?.error || "Erro ao cancelar inscrição.");
         } finally {
             setRemoving(null);
         }
@@ -136,7 +145,7 @@ export default function MySubscriptions() {
                                         {/* Imagem lateral */}
                                         <CardMedia
                                             component="img"
-                                            image={event.imageUrl || "https://images.unsplash.com/photo-1593113598332-cd288d649433?w=400&q=70"}
+                                            image={resolveImageUrl(event.imageUrl, "https://images.unsplash.com/photo-1593113598332-cd288d649433?w=400&q=70")}
                                             alt={event.title}
                                             sx={{
                                                 width: { xs: 90, sm: 140 },
@@ -187,7 +196,7 @@ export default function MySubscriptions() {
                                     </CardActionArea>
 
                                     {/* Botão cancelar — fora da CardActionArea para não aninhar <button> dentro de <button> */}
-                                    {status !== "passado" && (
+                                    {!NOT_CANCELLABLE_STATUSES.has(status) && (
                                         <Box sx={{ display: "flex", alignItems: "center", px: { xs: 2, sm: 2.5 } }}>
                                             <Button
                                                 variant="outlined" size="small"

@@ -4,7 +4,8 @@ import {
   Alert, Stack, MenuItem
 } from "@mui/material";
 import { useNavigate, useParams } from "react-router-dom";
-import { getEvent, updateEvent } from "../api/event";
+import { getEvent, updateEvent, uploadEventImage } from "../api/event";
+import { resolveImageUrl } from "../utils/image";
 
 const TYPE_OPTIONS = [
   { value: "LIMPEZA", label: "🧹 Limpeza" },
@@ -21,6 +22,16 @@ const STATUS_OPTIONS = [
   { value: "CLOSED", label: "Encerrado" },
 ];
 
+// Espelha a máquina de estados do backend (EventController.update): publicado com inscritos não
+// pode voltar a rascunho (usa Cancelar/Encerrar no painel) e encerrado é permanente — sem isto o
+// dropdown oferece transições que o servidor vai rejeitar com um 400 confuso. Sem inscritos,
+// despublicar continua permitido (nada a proteger ainda).
+function allowedStatusOptionsFrom(currentStatus, subscriberCount) {
+  if (currentStatus === "PUBLISHED" && subscriberCount > 0) return STATUS_OPTIONS.filter(o => o.value !== "DRAFT");
+  if (currentStatus === "CLOSED") return STATUS_OPTIONS.filter(o => o.value === "CLOSED");
+  return STATUS_OPTIONS;
+}
+
 // Converte um ISO datetime do backend para o formato aceite por <input type="datetime-local">
 function toLocalInput(iso) {
   if (!iso) return "";
@@ -32,30 +43,54 @@ export default function EventEdit() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [form, setForm] = useState(null);
+  // Estado/inscritos originais tal como vieram do servidor — as opções legais do dropdown
+  // dependem de onde o evento ESTÁ agora, não do que o utilizador já tenha selecionado.
+  const [originalStatus, setOriginalStatus] = useState(null);
+  const [originalSubscriberCount, setOriginalSubscriberCount] = useState(0);
   const [fetching, setFetching] = useState(true);
   const [fetchError, setFetchError] = useState(null);
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
     getEvent(id)
-      .then(({ data }) => setForm({
-        title: data.title,
-        location: data.location,
-        description: data.description || "",
-        startDate: toLocalInput(data.startDate),
-        endDate: toLocalInput(data.endDate),
-        imageUrl: data.imageUrl || "",
-        capacity: data.capacity,
-        type: data.type,
-        status: data.status,
-      }))
+      .then(({ data }) => {
+        setOriginalStatus(data.status);
+        setOriginalSubscriberCount(data.subscriberCount ?? 0);
+        setForm({
+          title: data.title,
+          location: data.location,
+          description: data.description || "",
+          startDate: toLocalInput(data.startDate),
+          endDate: toLocalInput(data.endDate),
+          imageUrl: data.imageUrl || "",
+          capacity: data.capacity,
+          type: data.type,
+          status: data.status,
+        });
+      })
       .catch(() => setFetchError("Não foi possível carregar este evento."))
       .finally(() => setFetching(false));
   }, [id]);
 
   const set = (field) => (e) =>
     setForm(f => ({ ...f, [field]: e.target.value }));
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingImage(true);
+    setErr(null);
+    try {
+      const { data } = await uploadEventImage(id, file);
+      setForm(f => ({ ...f, imageUrl: data.imageUrl }));
+    } catch (e) {
+      setErr(e.response?.data?.error || "Não foi possível enviar a imagem.");
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -74,7 +109,10 @@ export default function EventEdit() {
     }
 
     setLoading(true);
-    const toISO = (v) => v ? new Date(v).toISOString() : null;
+    // O backend guarda startDate/endDate como LocalDateTime (sem timezone) e trata-os
+    // como hora local do servidor — NÃO usar .toISOString() aqui, que converte para UTC
+    // e desalinha a hora (ex.: 15:30 local passa a ser lido como 14:30, "no passado").
+    const toISO = (v) => v ? `${v}:00` : null;
     try {
       await updateEvent(id, {
         ...form,
@@ -144,8 +182,9 @@ export default function EventEdit() {
             </Box>
             <Box sx={{ flex: "1 1 140px", minWidth: 0 }}>
               <TextField select label="Estado" fullWidth required
+                disabled={originalStatus === "CLOSED"}
                 value={form.status} onChange={set("status")} sx={fieldStyle}>
-                {STATUS_OPTIONS.map(o => (
+                {allowedStatusOptionsFrom(originalStatus, originalSubscriberCount).map(o => (
                   <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>
                 ))}
               </TextField>
@@ -191,11 +230,12 @@ export default function EventEdit() {
           <TextField label="Descrição" fullWidth multiline minRows={4}
             value={form.description} onChange={set("description")} sx={fieldStyle} />
 
-          {/* URL da imagem */}
-          <TextField label="URL da imagem (opcional)" fullWidth
-            value={form.imageUrl} onChange={set("imageUrl")}
-            placeholder="https://exemplo.com/imagem.jpg"
-            sx={fieldStyle} />
+          {/* Imagem */}
+          <Button component="label" variant="outlined" disabled={uploadingImage}
+            sx={{ color: "#1B4332", borderColor: "#1B4332", alignSelf: "flex-start" }}>
+            {uploadingImage ? "A enviar..." : form.imageUrl ? "Trocar imagem" : "Escolher imagem (opcional)"}
+            <input type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={handleFileChange} />
+          </Button>
 
           {/* Preview */}
           {form.imageUrl && (
@@ -204,7 +244,7 @@ export default function EventEdit() {
               height: 200, border: "1px solid #E2E8F0",
             }}>
               <img
-                src={form.imageUrl} alt="Preview"
+                src={resolveImageUrl(form.imageUrl)} alt="Preview"
                 style={{ width: "100%", height: "100%", objectFit: "cover" }}
                 onError={(e) => e.target.style.display = "none"}
               />

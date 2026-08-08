@@ -15,6 +15,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
 
 @Configuration
@@ -30,12 +31,26 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            // Sem isto, um pedido sem token (ou com um token inválido/expirado) recebe 403 do
+            // Http403ForbiddenEntryPoint por defeito do Spring Security (o fallback quando não há
+            // httpBasic()/formLogin() configurado) — não 401. Isso desativava por completo o
+            // refresh silencioso do axiosConfig.js (só reage a 401), deixando qualquer sessão mais
+            // longa que os 15 min do access token presa em 403s permanentes até um logout manual.
+            // 403 continua correto (e intocado) para um utilizador autenticado sem a role certa
+            // — esse caso passa pelo AccessDeniedHandler, não pelo AuthenticationEntryPoint.
+            .exceptionHandling(e -> e
+                .authenticationEntryPoint((request, response, authException) ->
+                    response.sendError(HttpServletResponse.SC_UNAUTHORIZED))
+            )
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/auth/login", "/auth/register", "/auth/refresh", "/auth/logout").permitAll()
+                .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/events/mine", "/events/*/subscribers").hasRole("PROMOTER")
                 .requestMatchers(HttpMethod.GET, "/events", "/events/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/events", "/events/**").hasRole("PROMOTER")
                 .requestMatchers(HttpMethod.PUT, "/events/**").hasRole("PROMOTER")
-                .requestMatchers("/auth/me", "/subscriptions/**").authenticated()
+                .requestMatchers(HttpMethod.DELETE, "/events/**").hasRole("PROMOTER")
+                .requestMatchers("/auth/me", "/subscriptions/**", "/notifications/**").authenticated()
                 .requestMatchers("/h2/**", "/h2-console/**").hasRole("PROMOTER")
                 .anyRequest().authenticated()
             )

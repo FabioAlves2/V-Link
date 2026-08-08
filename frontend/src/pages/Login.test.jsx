@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -57,5 +57,17 @@ describe("Login", () => {
 
     expect(await screen.findByText("Credenciais inválidas.")).toBeInTheDocument();
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it("does not get stuck in a loading state when fields are empty", async () => {
+    // Bypasses the <input required> browser gate (fireEvent.submit dispatches straight to the
+    // React handler) to exercise the empty-fields early-return path directly.
+    renderLogin();
+
+    fireEvent.submit(screen.getByRole("button", { name: /entrar/i }).closest("form"));
+
+    expect(await screen.findByText("Preenche todos os campos antes de continuar.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /entrar/i })).not.toBeDisabled();
+    expect(login).not.toHaveBeenCalled();
   });
 });

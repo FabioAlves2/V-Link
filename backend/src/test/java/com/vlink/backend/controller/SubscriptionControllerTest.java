@@ -1,6 +1,7 @@
 package com.vlink.backend.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vlink.backend.repo.SubscriptionRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -10,8 +11,15 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -21,6 +29,7 @@ class SubscriptionControllerTest {
 
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
+    @Autowired SubscriptionRepository subscriptionRepo;
 
     private String register(String prefix, String role) throws Exception {
         String email = prefix + "-" + UUID.randomUUID() + "@example.com";
@@ -36,13 +45,33 @@ class SubscriptionControllerTest {
     private long createEvent(String promoterToken, int capacity) throws Exception {
         String start = LocalDateTime.now().plusHours(24).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
         String end = LocalDateTime.now().plusHours(26).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
-        String body = "{\"title\":\"Sub Test Event\",\"location\":\"Porto\",\"capacity\":%d,\"startDate\":\"%s\",\"endDate\":\"%s\",\"status\":\"PUBLISHED\"}"
-            .formatted(capacity, start, end);
+        return createEventWithDates(promoterToken, capacity, start, end, "PUBLISHED");
+    }
+
+    private long createEventWithDates(String promoterToken, String start, String end, String status) throws Exception {
+        return createEventWithDates(promoterToken, 5, start, end, status);
+    }
+
+    private long createEventWithDates(String promoterToken, int capacity, String start, String end, String status) throws Exception {
+        String body = "{\"title\":\"Sub Test Event\",\"location\":\"Porto\",\"capacity\":%d,\"startDate\":\"%s\",\"endDate\":\"%s\",\"status\":\"%s\",\"type\":\"OUTRO\"}"
+            .formatted(capacity, start, end, status);
         String created = mockMvc.perform(post("/events").header("Authorization", "Bearer " + promoterToken)
                 .contentType(MediaType.APPLICATION_JSON).content(body))
             .andExpect(status().isCreated())
             .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(created).get("id").asLong();
+    }
+
+    private void updateEvent(String promoterToken, long id, String start, String end, String status) throws Exception {
+        updateEvent(promoterToken, id, 5, start, end, status);
+    }
+
+    private void updateEvent(String promoterToken, long id, int capacity, String start, String end, String status) throws Exception {
+        String body = "{\"title\":\"Sub Test Event\",\"location\":\"Porto\",\"capacity\":%d,\"startDate\":\"%s\",\"endDate\":\"%s\",\"status\":\"%s\",\"type\":\"OUTRO\"}"
+            .formatted(capacity, start, end, status);
+        mockMvc.perform(put("/events/" + id).header("Authorization", "Bearer " + promoterToken)
+                .contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isOk());
     }
 
     @Test
@@ -102,6 +131,45 @@ class SubscriptionControllerTest {
     }
 
     @Test
+    void concurrentSubscribeRequestsNeverExceedCapacity() throws Exception {
+        String promoterToken = register("sub-promoter", "PROMOTER");
+        long eventId = createEvent(promoterToken, 1);
+
+        int volunteerCount = 8;
+        List<String> tokens = new java.util.ArrayList<>();
+        for (int i = 0; i < volunteerCount; i++) {
+            tokens.add(register("sub-race-volunteer", "VOLUNTEER"));
+        }
+
+        ExecutorService pool = Executors.newFixedThreadPool(volunteerCount);
+        CountDownLatch ready = new CountDownLatch(volunteerCount);
+        CountDownLatch start = new CountDownLatch(1);
+        AtomicInteger successCount = new AtomicInteger();
+
+        for (String token : tokens) {
+            pool.submit(() -> {
+                try {
+                    ready.countDown();
+                    start.await();
+                    var result = mockMvc.perform(post("/subscriptions/" + eventId)
+                            .header("Authorization", "Bearer " + token))
+                        .andReturn();
+                    if (result.getResponse().getStatus() == 200) successCount.incrementAndGet();
+                } catch (Exception ignored) {
+                }
+            });
+        }
+
+        ready.await();
+        start.countDown();
+        pool.shutdown();
+        pool.awaitTermination(30, TimeUnit.SECONDS);
+
+        assertEquals(1, successCount.get(), "exactly one concurrent subscribe should succeed for capacity=1");
+        assertEquals(1, subscriptionRepo.countByEventId(eventId), "DB row count must never exceed capacity");
+    }
+
+    @Test
     void mySubscriptionsListsOnlyTheCallersEvents() throws Exception {
         String promoterToken = register("sub-promoter", "PROMOTER");
         String volunteerToken = register("sub-volunteer", "VOLUNTEER");
@@ -112,11 +180,140 @@ class SubscriptionControllerTest {
 
         mockMvc.perform(get("/subscriptions").header("Authorization", "Bearer " + volunteerToken))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$[?(@.id == " + eventId + ")]").exists());
+            .andExpect(jsonPath("$[?(@.id == " + eventId + ")]").exists())
+            .andExpect(jsonPath("$[0].subscriberCount").value(1));
 
         String otherVolunteerToken = register("sub-volunteer-other", "VOLUNTEER");
         mockMvc.perform(get("/subscriptions").header("Authorization", "Bearer " + otherVolunteerToken))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$[?(@.id == " + eventId + ")]").doesNotExist());
+    }
+
+    @Test
+    void subscribingToNonPublishedEventIsRejected() throws Exception {
+        String promoterToken = register("sub-promoter", "PROMOTER");
+        String start = LocalDateTime.now().plusHours(24).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        String end = LocalDateTime.now().plusHours(26).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        String draftBody = "{\"title\":\"Draft Sub Event\",\"location\":\"Porto\",\"capacity\":5,\"startDate\":\"%s\",\"endDate\":\"%s\",\"status\":\"DRAFT\"}"
+            .formatted(start, end);
+        String created = mockMvc.perform(post("/events").header("Authorization", "Bearer " + promoterToken)
+                .contentType(MediaType.APPLICATION_JSON).content(draftBody))
+            .andExpect(status().isCreated())
+            .andReturn().getResponse().getContentAsString();
+        long draftEventId = objectMapper.readTree(created).get("id").asLong();
+
+        String volunteerToken = register("sub-volunteer", "VOLUNTEER");
+        mockMvc.perform(post("/subscriptions/" + draftEventId).header("Authorization", "Bearer " + volunteerToken))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").exists());
+    }
+
+    @Test
+    void subscribingToClosedEventIsRejected() throws Exception {
+        String promoterToken = register("sub-promoter", "PROMOTER");
+        String future1 = LocalDateTime.now().plusHours(24).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        String future2 = LocalDateTime.now().plusHours(26).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        String past1 = LocalDateTime.now().minusHours(24).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        String past2 = LocalDateTime.now().minusHours(22).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        long eventId = createEventWithDates(promoterToken, future1, future2, "PUBLISHED");
+        updateEvent(promoterToken, eventId, past1, past2, "PUBLISHED"); // simula "já começou"
+        updateEvent(promoterToken, eventId, past1, past2, "CLOSED"); // encerra
+
+        String volunteerToken = register("sub-volunteer", "VOLUNTEER");
+        mockMvc.perform(post("/subscriptions/" + eventId).header("Authorization", "Bearer " + volunteerToken))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").exists());
+    }
+
+    @Test
+    void unsubscribingFromClosedEventIsRejectedAndPreservesTheRecord() throws Exception {
+        String promoterToken = register("sub-promoter", "PROMOTER");
+        String volunteerToken = register("sub-volunteer", "VOLUNTEER");
+        String future1 = LocalDateTime.now().plusHours(24).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        // endDate ainda no futuro de propósito — encerrar não depende do endDate já ter passado,
+        // só do startDate, e é exatamente esse cenário que fazia o botão "Cancelar" continuar
+        // visível em MySubscriptions.jsx (getStatus() ali só olhava para as datas).
+        String futureEnd = LocalDateTime.now().plusHours(48).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        String past1 = LocalDateTime.now().minusHours(1).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        long eventId = createEventWithDates(promoterToken, future1, futureEnd, "PUBLISHED");
+
+        mockMvc.perform(post("/subscriptions/" + eventId).header("Authorization", "Bearer " + volunteerToken))
+            .andExpect(status().isOk());
+
+        updateEvent(promoterToken, eventId, past1, futureEnd, "PUBLISHED"); // simula "já começou"
+        updateEvent(promoterToken, eventId, past1, futureEnd, "CLOSED"); // encerra antes do fim
+
+        mockMvc.perform(delete("/subscriptions/" + eventId).header("Authorization", "Bearer " + volunteerToken))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").exists());
+
+        assertEquals(1, subscriptionRepo.countByEventId(eventId),
+            "a inscrição (registo histórico de participação) não pode ser apagada de um evento encerrado");
+    }
+
+    @Test
+    void unsubscribingFromAnAlreadyStartedButStillPublishedEventIsStillAllowed() throws Exception {
+        String promoterToken = register("sub-promoter", "PROMOTER");
+        String volunteerToken = register("sub-volunteer", "VOLUNTEER");
+        String future1 = LocalDateTime.now().plusHours(24).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        String future2 = LocalDateTime.now().plusHours(26).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        String past1 = LocalDateTime.now().minusHours(1).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        long eventId = createEventWithDates(promoterToken, future1, future2, "PUBLISHED");
+
+        mockMvc.perform(post("/subscriptions/" + eventId).header("Authorization", "Bearer " + volunteerToken))
+            .andExpect(status().isOk());
+
+        updateEvent(promoterToken, eventId, past1, future2, "PUBLISHED"); // já começou, mas NÃO encerrado
+
+        mockMvc.perform(delete("/subscriptions/" + eventId).header("Authorization", "Bearer " + volunteerToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.subscribed").value(false));
+
+        assertEquals(0, subscriptionRepo.countByEventId(eventId));
+    }
+
+    // PUBLISHED não implica "ainda a decorrer": o organizador pode nunca chegar a "Encerrar"
+    // manualmente um evento cujo endDate já passou. subscribe() tem de olhar para a data, não só
+    // para o status.
+    @Test
+    void subscribingToAnAlreadyEndedEventIsRejected() throws Exception {
+        String promoterToken = register("sub-promoter", "PROMOTER");
+        String future1 = LocalDateTime.now().plusHours(24).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        String future2 = LocalDateTime.now().plusHours(26).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        String past1 = LocalDateTime.now().minusHours(4).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        String past2 = LocalDateTime.now().minusHours(2).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        long eventId = createEventWithDates(promoterToken, future1, future2, "PUBLISHED");
+        updateEvent(promoterToken, eventId, past1, past2, "PUBLISHED"); // já terminou, nunca foi encerrado
+
+        String volunteerToken = register("sub-volunteer", "VOLUNTEER");
+        mockMvc.perform(post("/subscriptions/" + eventId).header("Authorization", "Bearer " + volunteerToken))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").exists());
+    }
+
+    // Mesma ideia do teste "ClosedEvent" acima, mas para um evento que já terminou (endDate no
+    // passado) sem nunca ter sido formalmente "Encerrado" — o check-in não tem guard de data
+    // (EventSubscriberController), por isso este é o mesmo risco de perder checkedIn/checkedInAt.
+    @Test
+    void unsubscribingFromAnAlreadyEndedButNeverClosedEventIsRejectedAndPreservesTheRecord() throws Exception {
+        String promoterToken = register("sub-promoter", "PROMOTER");
+        String volunteerToken = register("sub-volunteer", "VOLUNTEER");
+        String future1 = LocalDateTime.now().plusHours(24).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        String future2 = LocalDateTime.now().plusHours(26).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        long eventId = createEventWithDates(promoterToken, future1, future2, "PUBLISHED");
+
+        mockMvc.perform(post("/subscriptions/" + eventId).header("Authorization", "Bearer " + volunteerToken))
+            .andExpect(status().isOk());
+
+        String past1 = LocalDateTime.now().minusHours(4).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        String past2 = LocalDateTime.now().minusHours(2).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        updateEvent(promoterToken, eventId, past1, past2, "PUBLISHED"); // terminou, continua PUBLISHED
+
+        mockMvc.perform(delete("/subscriptions/" + eventId).header("Authorization", "Bearer " + volunteerToken))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").exists());
+
+        assertEquals(1, subscriptionRepo.countByEventId(eventId),
+            "a inscrição não pode ser apagada de um evento já terminado, mesmo que nunca tenha sido formalmente encerrado");
     }
 }

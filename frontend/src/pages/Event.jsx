@@ -7,6 +7,7 @@ import {
 import { LocationOn, CalendarToday, People, ArrowBack, BookmarkAdd, BookmarkAdded } from "@mui/icons-material";
 import { isSubscribed, subscribe, unsubscribe } from "../api/user";
 import { getEvent } from "../api/event";
+import { resolveImageUrl } from "../utils/image";
 
 const TYPE_LABELS = {
     LIMPEZA: "🧹 Limpeza", DOACAO: "🎁 Doação",
@@ -35,14 +36,18 @@ export default function Event() {
     //Carrega evento e verifica se o utilizador está inscrito
     useEffect(() => {
         if (!id) return;
+        let cancelled = false;
+
         getEvent(id)
-            .then(({ data }) => setEvent(data))
-            .catch(() => setError("Evento não encontrado."))
-            .finally(() => setLoading(false));
+            .then(({ data }) => { if (!cancelled) setEvent(data); })
+            .catch(() => { if (!cancelled) setError("Evento não encontrado."); })
+            .finally(() => { if (!cancelled) setLoading(false); });
 
         isSubscribed(id)
-            .then(({ data }) => setSubscribed(data.subscribed))
+            .then(({ data }) => { if (!cancelled) setSubscribed(data.subscribed); })
             .catch(() => { });
+
+        return () => { cancelled = true; };
     }, [id]);
 
 
@@ -83,6 +88,17 @@ export default function Event() {
 
     const registered = event.subscriberCount ?? 0;
     const capacityPct = Math.min((registered / event.capacity) * 100, 100);
+    // Um evento PUBLISHED cujo endDate já passou continua PUBLISHED até o organizador o
+    // "Encerrar" manualmente (ver EventRepository.findByFilters) — por isso "a decorrer" exige
+    // as duas condições, não só o status. O backend já rejeita subscribe/unsubscribe nestes
+    // casos (ver SubscriptionController); isto evita mostrar um botão que o servidor vai recusar.
+    const isPast = event.endDate ? new Date(event.endDate) < new Date() : false;
+    const canModifySubscription = event.status === "PUBLISHED" && !isPast;
+    const unavailableReason = event.status === "CLOSED"
+        ? "Este evento já foi encerrado."
+        : isPast
+            ? "Este evento já terminou."
+            : "Este evento ainda não está disponível para inscrições.";
 
     return (
         <Box sx={{ maxWidth: 800, mx: "auto", py: 4, px: { xs: 2, md: 0 } }}>
@@ -102,7 +118,7 @@ export default function Event() {
                 boxShadow: "0 8px 32px rgba(27,67,50,0.15)",
             }}>
                 <img
-                    src={event.imageUrl || "https://images.unsplash.com/photo-1593113598332-cd288d649433?w=900&q=80"}
+                    src={resolveImageUrl(event.imageUrl, "https://images.unsplash.com/photo-1593113598332-cd288d649433?w=900&q=80")}
                     alt={event.title}
                     style={{ width: "100%", height: "100%", objectFit: "cover" }}
                 />
@@ -226,25 +242,37 @@ export default function Event() {
                 {subError && <Alert severity="error" sx={{ mb: 2, borderRadius: "10px" }}>{subError}</Alert>}
 
                 {/* Botão subscrever */}
-                <Button
-                    variant={subscribed ? "outlined" : "contained"}
-                    size="large" fullWidth
-                    startIcon={subscribed ? <BookmarkAdded /> : <BookmarkAdd />}
-                    onClick={handleSubscribe}
-                    disabled={subLoading}
-                    sx={{
-                        py: 1.6, fontSize: "1rem", fontWeight: 600,
-                        ...(subscribed ? {
-                            color: "#1B4332", borderColor: "#1B4332",
-                            "&:hover": { backgroundColor: "#1B433310" },
-                        } : {
-                            backgroundColor: "#1B4332",
-                            "&:hover": { backgroundColor: "#0A2318" },
-                        }),
-                    }}
-                >
-                    {subscribed ? "Inscrito ✓" : "Inscrever-me neste evento"}
-                </Button>
+                {canModifySubscription ? (
+                    <Button
+                        variant={subscribed ? "outlined" : "contained"}
+                        size="large" fullWidth
+                        startIcon={subscribed ? <BookmarkAdded /> : <BookmarkAdd />}
+                        onClick={handleSubscribe}
+                        disabled={subLoading}
+                        sx={{
+                            py: 1.6, fontSize: "1rem", fontWeight: 600,
+                            ...(subscribed ? {
+                                color: "#1B4332", borderColor: "#1B4332",
+                                "&:hover": { backgroundColor: "#1B433310" },
+                            } : {
+                                backgroundColor: "#1B4332",
+                                "&:hover": { backgroundColor: "#0A2318" },
+                            }),
+                        }}
+                    >
+                        {subscribed ? "Inscrito ✓" : "Inscrever-me neste evento"}
+                    </Button>
+                ) : subscribed ? (
+                    <Button
+                        variant="outlined" size="large" fullWidth disabled
+                        startIcon={<BookmarkAdded />}
+                        sx={{ py: 1.6, fontSize: "1rem", fontWeight: 600, color: "#1B4332", borderColor: "#1B433240" }}
+                    >
+                        Inscrito ✓ — {unavailableReason}
+                    </Button>
+                ) : (
+                    <Alert severity="info" sx={{ borderRadius: "10px" }}>{unavailableReason}</Alert>
+                )}
             </Box>
         </Box>
     );

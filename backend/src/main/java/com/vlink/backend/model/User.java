@@ -19,7 +19,10 @@ public class User {
     @Column(nullable=false, length = 100)
     private String name;
 
-    //Unique
+    //Unique — @JsonIgnore porque User é serializado como sub-objeto (Event.organizer) em
+    //endpoints públicos (GET /events); os pontos que precisam do email fazem-no via Map.of(...)
+    //manual (AuthController) ou via DTOs (SubscriberResponse), nunca por serialização direta de User.
+    @JsonIgnore
     @Column(nullable=false, unique=true, length=150)
     private String email;
     

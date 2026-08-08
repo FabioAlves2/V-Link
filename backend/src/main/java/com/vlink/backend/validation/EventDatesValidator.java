@@ -4,8 +4,6 @@ import com.vlink.backend.model.Event;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 
-import java.time.LocalDateTime;
-
 public class EventDatesValidator implements ConstraintValidator<ValidEventDates, Event> {
 
     @Override
@@ -17,12 +15,10 @@ public class EventDatesValidator implements ConstraintValidator<ValidEventDates,
         boolean valid = true;
         context.disableDefaultConstraintViolation();
 
-        if (event.getStartDate().isBefore(LocalDateTime.now())) {
-            context.buildConstraintViolationWithTemplate("A data de início não pode ser no passado.")
-                .addPropertyNode("startDate")
-                .addConstraintViolation();
-            valid = false;
-        }
+        // A regra "não pode começar no passado" só se aplica à CRIAÇÃO de um evento —
+        // é validada explicitamente em EventController.create(), não aqui, porque este
+        // constraint corre em todos os @Valid binds, incluindo o PUT usado para editar/encerrar
+        // um evento já a decorrer ou já terminado (cujo startDate é, nesse ponto, sempre passado).
         if (event.getEndDate().isBefore(event.getStartDate())) {
             context.buildConstraintViolationWithTemplate("A data de fim não pode ser anterior à data de início.")
                 .addPropertyNode("endDate")

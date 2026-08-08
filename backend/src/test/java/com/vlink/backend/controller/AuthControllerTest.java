@@ -2,6 +2,7 @@ package com.vlink.backend.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vlink.backend.auth.RegisterAttemptService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -21,6 +22,7 @@ class AuthControllerTest {
 
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
+    @Autowired RegisterAttemptService registerAttemptService;
 
     private String uniqueEmail(String prefix) {
         return prefix + "-" + UUID.randomUUID() + "@example.com";
@@ -80,6 +82,28 @@ class AuthControllerTest {
         mockMvc.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\":\"%s\",\"password\":\"wrong\"}".formatted(email)))
             .andExpect(status().isTooManyRequests());
+    }
+
+    @Test
+    void repeatedDuplicateRegistrationAttemptsAreRateLimited() throws Exception {
+        // O IP simulado pelo MockMvc é sempre o mesmo (127.0.0.1) — o limitador é partilhado com
+        // o resto da suite (o contexto Spring é cacheado entre classes), por isso é reposto no
+        // fim, para não bloquear registos legítimos de outros testes.
+        String clientIp = "127.0.0.1";
+        try {
+            String email = uniqueEmail("dup-enum");
+            register(email, "password123", "VOLUNTEER");
+
+            String body = "{\"name\":\"Test\",\"email\":\"%s\",\"password\":\"password123\"}".formatted(email);
+            for (int i = 0; i < 10; i++) {
+                mockMvc.perform(post("/auth/register").contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest());
+            }
+            mockMvc.perform(post("/auth/register").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isTooManyRequests());
+        } finally {
+            registerAttemptService.reset(clientIp);
+        }
     }
 
     @Test

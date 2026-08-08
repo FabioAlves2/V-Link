@@ -1,6 +1,14 @@
 spring:
   profiles:
     active: dev  # por agora trabalhamos sempre em H2
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 5MB
+
+app:
+  upload:
+    dir: ./uploads
 
 logging:
   level:
