@@ -9,6 +9,8 @@ spring:
 app:
   upload:
     dir: ./uploads
+  cors:
+    allowed-origins: http://localhost:5173
   mail:
     enabled: false
     from: no-reply@vlink.pt
@@ -18,3 +20,20 @@ app:
 logging:
   level:
     org.hibernate.SQL: warn
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+  health:
+    mail:
+      # Actuator auto-registers a mail health indicator whenever spring-boot-starter-mail is on
+      # the classpath, and it live-connects to the configured SMTP host. Mail here is deliberately
+      # best-effort (app.mail.enabled, EmailService swallows send failures) — an unreachable SMTP
+      # host (the docker-compose demo's placeholder, or dev/test with no real server at all)
+      # shouldn't drag the whole app's /actuator/health to DOWN.
+      enabled: false

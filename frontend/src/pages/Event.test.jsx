@@ -5,7 +5,7 @@ import { MemoryRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import Event from "./Event";
 import { getEvent } from "../api/event";
-import { isSubscribed, subscribe, unsubscribe, isFavorited, favoriteEvent, unfavoriteEvent } from "../api/user";
+import { isSubscribed, isFavorited, favoriteEvent, unfavoriteEvent } from "../api/user";
 import { useAuth } from "../context/authContext";
 
 vi.mock("../api/event", () => ({ getEvent: vi.fn() }));

@@ -19,7 +19,9 @@ import OrganizerDashboard from "./pages/OrganizerDashboard";
 import EventSubscribers from "./pages/EventSubscribers";
 
 import { AuthProvider, useAuth } from "./context/authContext";
+import ErrorBoundary from "./components/ErrorBoundary";
 
+// eslint-disable-next-line react-refresh/only-export-components -- route guards live alongside the router that uses them
 function ProtectedRoute({ children, requiredRole }) {
   const { token, role } = useAuth();
   if (!token) return <Navigate to="/login" />;
@@ -27,6 +29,7 @@ function ProtectedRoute({ children, requiredRole }) {
   return children;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- route guards live alongside the router that uses them
 function AuthRoute({ children }) {
   const { token } = useAuth();
   if (token) return <Navigate to="/events" />;
@@ -66,6 +69,7 @@ const theme = createTheme({
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
+    <ErrorBoundary>
     <AuthProvider>
       <ThemeProvider theme={theme}>
         <CssBaseline />
@@ -127,5 +131,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         </BrowserRouter>
       </ThemeProvider>
     </AuthProvider>
+    </ErrorBoundary>
   </React.StrictMode>
 );

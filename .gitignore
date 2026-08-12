@@ -16,3 +16,13 @@ dist/
 
 # Env files
 .env
+
+# Local uploads (backend disk storage)
+backend/uploads/
+
+# Local-only config overrides
+application-local.yml
+*.local.yml
+
+# Rolling log files (prod profile)
+logs/

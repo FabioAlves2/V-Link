@@ -43,4 +43,5 @@ export function AuthProvider({ children }) {
     );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- a context+hook pair belongs in one file
 export const useAuth = () => useContext(AuthContext);

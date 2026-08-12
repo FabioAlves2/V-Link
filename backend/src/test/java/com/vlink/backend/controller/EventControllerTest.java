@@ -685,6 +685,74 @@ class EventControllerTest {
     }
 
     @Test
+    void dateFilterMatchesEventsStartingOnThatExactDateAndExcludesOtherDays() throws Exception {
+        String promoterToken = registerPromoter();
+        LocalDateTime matchStart = LocalDateTime.now().plusDays(5).withHour(10).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime otherStart = matchStart.plusDays(3);
+        String matchTitle = "Evento Data " + UUID.randomUUID().toString().substring(0, 8);
+        String otherTitle = "Evento Outro Dia " + UUID.randomUUID().toString().substring(0, 8);
+
+        long matchId = createEventWithStartDate(promoterToken, matchTitle, matchStart);
+        long otherId = createEventWithStartDate(promoterToken, otherTitle, otherStart);
+
+        mockMvc.perform(get("/events").param("date", matchStart.toLocalDate().toString()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[?(@.id == " + matchId + ")]").exists())
+            .andExpect(jsonPath("$[?(@.id == " + otherId + ")]").doesNotExist());
+    }
+
+    @Test
+    void allFourFiltersCombinedTogetherStillReturnOnlyTheExactMatch() throws Exception {
+        String promoterToken = registerPromoter();
+        LocalDateTime start = LocalDateTime.now().plusDays(6).withHour(9).withMinute(0).withSecond(0).withNano(0);
+        String matchTitle = "Praia Combinada " + UUID.randomUUID().toString().substring(0, 8);
+        long matchId = createEventWithTitleDescriptionAndStartDate(
+            promoterToken, matchTitle, "Limpeza da faixa costeira.", "Aveiro", "AMBIENTE", start);
+
+        // Mesma keyword e mesmo dia, mas localização e tipo diferentes — não deve passar os quatro filtros juntos.
+        String sameKeywordTitle = "Praia Parecida " + UUID.randomUUID().toString().substring(0, 8);
+        createEventWithTitleDescriptionAndStartDate(
+            promoterToken, sameKeywordTitle, "Limpeza da faixa costeira.", "Faro", "SOCIAL", start);
+
+        mockMvc.perform(get("/events")
+                .param("location", "Aveiro")
+                .param("date", start.toLocalDate().toString())
+                .param("type", "AMBIENTE")
+                .param("keyword", "praia"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(1))
+            .andExpect(jsonPath("$[0].id").value(matchId));
+    }
+
+    @Test
+    void listingEventsWithNoFiltersAtAllStillSucceeds() throws Exception {
+        String promoterToken = registerPromoter();
+        createEventWithTitleAndDescription(promoterToken, "Sem Filtros " + UUID.randomUUID().toString().substring(0, 8), null, "Porto", "OUTRO", "PUBLISHED");
+
+        mockMvc.perform(get("/events"))
+            .andExpect(status().isOk());
+    }
+
+    private long createEventWithStartDate(String promoterToken, String title, LocalDateTime start) throws Exception {
+        return createEventWithTitleDescriptionAndStartDate(promoterToken, title, null, "Porto", "OUTRO", start);
+    }
+
+    private long createEventWithTitleDescriptionAndStartDate(String promoterToken, String title, String description,
+            String location, String type, LocalDateTime start) throws Exception {
+        String descriptionJson = description == null ? "null" : "\"" + description + "\"";
+        String body = "{\"title\":\"%s\",\"description\":%s,\"location\":\"%s\",\"capacity\":5,\"startDate\":\"%s\",\"endDate\":\"%s\",\"status\":\"PUBLISHED\",\"type\":\"%s\"}"
+            .formatted(title, descriptionJson, location,
+                start.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
+                start.plusHours(2).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
+                type);
+        String created = mockMvc.perform(post("/events").header("Authorization", "Bearer " + promoterToken)
+                .contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isCreated())
+            .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(created).get("id").asLong();
+    }
+
+    @Test
     void getEventByIdSucceedsForAGenuinelyAnonymousRequestWithNoAuthorizationHeader() throws Exception {
         String promoterToken = registerPromoter();
         long eventId = createEvent(promoterToken, "PUBLISHED");

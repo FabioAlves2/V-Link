@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class ApiExceptionHandlerTest {
 
@@ -58,5 +59,16 @@ class ApiExceptionHandlerTest {
 
         assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
         assertEquals("DATA_CONFLICT", response.getBody().get("code"));
+    }
+
+    @Test
+    void unexpectedExceptionReturnsGenericSafeBodyNotTheRealMessage() {
+        RuntimeException ex = new RuntimeException("db password=supersecret leaked in stack trace");
+
+        ResponseEntity<Map<String, String>> response = handler.handleUnexpected(ex);
+
+        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
+        assertEquals("Ocorreu um erro inesperado. Tenta novamente mais tarde.", response.getBody().get("error"));
+        assertFalse(response.getBody().toString().contains("supersecret"));
     }
 }
