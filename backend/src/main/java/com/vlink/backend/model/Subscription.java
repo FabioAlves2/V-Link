@@ -26,4 +26,11 @@ public class Subscription {
 
     @Column(name = "checked_in_at")
     private LocalDateTime checkedInAt;
+
+    // Marca quando o lembrete de "evento a começar em breve" foi enviado, para não o repetir a
+    // cada execução do EventReminderScheduler. Reposto a null se o evento for reagendado
+    // (EventController.update) — sem isso, quem já tinha sido avisado para o horário antigo
+    // nunca seria avisado para o novo.
+    @Column(name = "reminder_sent_at")
+    private LocalDateTime reminderSentAt;
 }

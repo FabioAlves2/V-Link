@@ -29,9 +29,43 @@ export default function Navbar() {
         return () => clearInterval(interval);
     }, [token]);
 
-    if (!token) return null;
-
     const isActive = (path) => location.pathname.startsWith(path);
+
+    // Visitante anónimo (ex.: link de evento partilhado) — cabeçalho mínimo em vez de nada,
+    // para dar contexto de marca e um caminho óbvio para entrar; sem os links/menus que
+    // dependem de sessão iniciada.
+    if (!token) {
+        return (
+            <AppBar position="sticky" elevation={0} sx={{
+                backgroundColor: "#1B4332",
+                borderBottom: "1px solid rgba(255,255,255,0.08)",
+            }}>
+                <Toolbar sx={{ px: { xs: 2, md: 4 }, minHeight: "64px !important" }}>
+                    <Typography
+                        component={Link} to="/"
+                        sx={{
+                            fontFamily: "'Playfair Display', serif",
+                            fontSize: "1.5rem", fontWeight: 700,
+                            color: "#F8F3E6", textDecoration: "none",
+                            letterSpacing: "-0.3px", flexGrow: 1,
+                        }}
+                    >
+                        V-Link
+                    </Typography>
+                    <Button
+                        component={Link} to="/login"
+                        variant="outlined"
+                        sx={{
+                            color: "#F8F3E6", borderColor: "rgba(255,255,255,0.4)",
+                            "&:hover": { borderColor: "#F8F3E6", backgroundColor: "rgba(255,255,255,0.08)" },
+                        }}
+                    >
+                        Entrar
+                    </Button>
+                </Toolbar>
+            </AppBar>
+        );
+    }
 
     const openNotifications = (e) => {
         setNotifAnchorEl(e.currentTarget);
@@ -93,6 +127,33 @@ export default function Navbar() {
                     >
                         As minhas inscrições
                     </Button>
+
+                    <Button
+                        component={Link} to="/favorites"
+                        sx={{
+                            color: isActive("/favorites") ? "#52B788" : "rgba(255,255,255,0.75)",
+                            fontWeight: isActive("/favorites") ? 600 : 400,
+                            fontSize: "0.95rem",
+                            "&:hover": { color: "#F8F3E6", backgroundColor: "rgba(255,255,255,0.08)" },
+                        }}
+                    >
+                        Favoritos
+                    </Button>
+
+                    {/* Só visível para VOLUNTEER */}
+                    {role === "VOLUNTEER" && (
+                        <Button
+                            component={Link} to="/my-dashboard"
+                            sx={{
+                                color: isActive("/my-dashboard") ? "#52B788" : "rgba(255,255,255,0.75)",
+                                fontWeight: isActive("/my-dashboard") ? 600 : 400,
+                                fontSize: "0.95rem",
+                                "&:hover": { color: "#F8F3E6", backgroundColor: "rgba(255,255,255,0.08)" },
+                            }}
+                        >
+                            O meu painel
+                        </Button>
+                    )}
 
                     {/* Só visível para PROMOTER — "Criar evento" já está no Painel do organizador */}
                     {role === "PROMOTER" && (

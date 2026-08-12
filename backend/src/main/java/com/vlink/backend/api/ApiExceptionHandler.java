@@ -44,6 +44,13 @@ public class ApiExceptionHandler {
       return ResponseEntity.status(HttpStatus.CONFLICT)
           .body(Map.of("error", "Email já existe", "code", "USER_EMAIL_CONFLICT"));
     }
+    // Tem de vir antes do check de subscriptions abaixo: a tabela favorites usa as mesmas
+    // colunas user_id/event_id, por isso sem esta ordem uma violação de favoritos era
+    // classificada (incorretamente) como um conflito de inscrição.
+    if (detail.contains("favorite")) {
+      return ResponseEntity.status(HttpStatus.CONFLICT)
+          .body(Map.of("error", "Este evento já está nos teus favoritos", "code", "FAVORITE_CONFLICT"));
+    }
     if (detail.contains("user_id") && detail.contains("event_id")) {
       return ResponseEntity.status(HttpStatus.CONFLICT)
           .body(Map.of("error", "Já estás inscrito neste evento", "code", "SUBSCRIPTION_CONFLICT"));

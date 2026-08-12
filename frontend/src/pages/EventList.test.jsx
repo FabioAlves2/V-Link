@@ -50,4 +50,40 @@ describe("EventList", () => {
     await waitFor(() => expect(getEvents).toHaveBeenCalledTimes(1), { timeout: 1000 });
     expect(getEvents).toHaveBeenCalledWith(expect.objectContaining({ location: "Porto" }));
   });
+
+  it("debounces the keyword field the same way as the location field", async () => {
+    const user = userEvent.setup();
+    renderEventList();
+    await screen.findByText("Praia Limpa");
+    getEvents.mockClear();
+
+    await user.type(screen.getByLabelText("Palavra-chave"), "praia");
+
+    expect(getEvents).not.toHaveBeenCalled();
+
+    await waitFor(() => expect(getEvents).toHaveBeenCalledTimes(1), { timeout: 1000 });
+    expect(getEvents).toHaveBeenCalledWith(expect.objectContaining({ keyword: "praia" }));
+  });
+
+  it("sends the keyword param only when non-empty", async () => {
+    renderEventList();
+    await screen.findByText("Praia Limpa");
+
+    expect(getEvents).toHaveBeenCalledWith(expect.not.objectContaining({ keyword: expect.anything() }));
+  });
+
+  it("clearFilters resets the keyword field along with the others", async () => {
+    const user = userEvent.setup();
+    renderEventList();
+    await screen.findByText("Praia Limpa");
+
+    await user.type(screen.getByLabelText("Palavra-chave"), "praia");
+    await waitFor(() => expect(getEvents).toHaveBeenCalledWith(expect.objectContaining({ keyword: "praia" })));
+
+    getEvents.mockClear();
+    await user.click(screen.getByRole("button", { name: /limpar/i }));
+
+    expect(screen.getByLabelText("Palavra-chave")).toHaveValue("");
+    await waitFor(() => expect(getEvents).toHaveBeenCalledWith(expect.not.objectContaining({ keyword: expect.anything() })));
+  });
 });

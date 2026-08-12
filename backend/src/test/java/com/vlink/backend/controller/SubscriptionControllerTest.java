@@ -316,4 +316,131 @@ class SubscriptionControllerTest {
         assertEquals(1, subscriptionRepo.countByEventId(eventId),
             "a inscrição não pode ser apagada de um evento já terminado, mesmo que nunca tenha sido formalmente encerrado");
     }
+
+    private long subscribeAndGetUserId(String promoterToken, String volunteerToken, long eventId) throws Exception {
+        mockMvc.perform(post("/subscriptions/" + eventId).header("Authorization", "Bearer " + volunteerToken))
+            .andExpect(status().isOk());
+        String subscribers = mockMvc.perform(get("/events/" + eventId + "/subscribers").header("Authorization", "Bearer " + promoterToken))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(subscribers).get(0).get("userId").asLong();
+    }
+
+    private void setAttendance(String promoterToken, long eventId, long userId, boolean checkedIn) throws Exception {
+        mockMvc.perform(put("/events/" + eventId + "/subscribers/" + userId + "/attendance")
+                .header("Authorization", "Bearer " + promoterToken)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"checkedIn\":" + checkedIn + "}"))
+            .andExpect(status().isOk());
+    }
+
+    @Test
+    void summaryEndpointRequiresAuthentication() throws Exception {
+        mockMvc.perform(get("/subscriptions/summary"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void summarySplitsUpcomingAndPastCorrectly() throws Exception {
+        String promoterToken = register("sub-promoter", "PROMOTER");
+        String volunteerToken = register("sub-volunteer", "VOLUNTEER");
+
+        long upcomingEventId = createEvent(promoterToken, 5); // start/end no futuro (helper padrão)
+
+        String past1 = LocalDateTime.now().minusHours(4).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        String past2 = LocalDateTime.now().minusHours(2).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        String future1 = LocalDateTime.now().plusHours(24).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        String future2 = LocalDateTime.now().plusHours(26).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        long pastEventId = createEventWithDates(promoterToken, future1, future2, "PUBLISHED");
+
+        mockMvc.perform(post("/subscriptions/" + upcomingEventId).header("Authorization", "Bearer " + volunteerToken))
+            .andExpect(status().isOk());
+        mockMvc.perform(post("/subscriptions/" + pastEventId).header("Authorization", "Bearer " + volunteerToken))
+            .andExpect(status().isOk());
+
+        updateEvent(promoterToken, pastEventId, past1, past2, "PUBLISHED"); // move para o passado
+
+        mockMvc.perform(get("/subscriptions/summary").header("Authorization", "Bearer " + volunteerToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.upcomingEvents.length()").value(1))
+            .andExpect(jsonPath("$.upcomingEvents[0].id").value(upcomingEventId))
+            .andExpect(jsonPath("$.pastEvents.length()").value(1))
+            .andExpect(jsonPath("$.pastEvents[0].event.id").value(pastEventId))
+            .andExpect(jsonPath("$.pastEvents[0].checkedIn").value(false));
+    }
+
+    @Test
+    void summaryComputesTotalHoursOnlyFromCheckedInSubscriptions() throws Exception {
+        String promoterToken = register("sub-promoter", "PROMOTER");
+        String volunteerToken = register("sub-volunteer", "VOLUNTEER");
+        String future1 = LocalDateTime.now().plusHours(24).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        String future2 = LocalDateTime.now().plusHours(26).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+
+        // create() rejeita startDate no passado — cria sempre no futuro e move para o passado
+        // via update(), tal como o resto desta classe (ver createAlreadyStartedEvent em EventControllerTest).
+        long checkedInEventId = createEventWithDates(promoterToken, future1, future2, "PUBLISHED");
+        long notCheckedInEventId = createEventWithDates(promoterToken, future1, future2, "PUBLISHED");
+
+        long userIdChecked = subscribeAndGetUserId(promoterToken, volunteerToken, checkedInEventId);
+        long userIdNotChecked = subscribeAndGetUserId(promoterToken, volunteerToken, notCheckedInEventId);
+
+        String checkedStart = LocalDateTime.now().minusHours(6).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        String checkedEnd = LocalDateTime.now().minusHours(4).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME); // 2h
+        updateEvent(promoterToken, checkedInEventId, checkedStart, checkedEnd, "PUBLISHED");
+        setAttendance(promoterToken, checkedInEventId, userIdChecked, true);
+
+        String notCheckedStart = LocalDateTime.now().minusHours(3).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        String notCheckedEnd = LocalDateTime.now().minusHours(1).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME); // 2h, sem check-in
+        updateEvent(promoterToken, notCheckedInEventId, notCheckedStart, notCheckedEnd, "PUBLISHED");
+
+        mockMvc.perform(get("/subscriptions/summary").header("Authorization", "Bearer " + volunteerToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.pastEvents.length()").value(2))
+            .andExpect(jsonPath("$.totalHours").value(2.0));
+    }
+
+    @Test
+    void summaryHoursComputationHandlesFractionalHours() throws Exception {
+        String promoterToken = register("sub-promoter", "PROMOTER");
+        String volunteerToken = register("sub-volunteer", "VOLUNTEER");
+        String future1 = LocalDateTime.now().plusHours(24).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        String future2 = LocalDateTime.now().plusHours(26).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        long eventId = createEventWithDates(promoterToken, future1, future2, "PUBLISHED");
+
+        long userId = subscribeAndGetUserId(promoterToken, volunteerToken, eventId);
+
+        String start = LocalDateTime.now().minusHours(3).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        String end = LocalDateTime.now().minusHours(3).plusMinutes(90).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME); // 90 min
+        updateEvent(promoterToken, eventId, start, end, "PUBLISHED");
+        setAttendance(promoterToken, eventId, userId, true);
+
+        mockMvc.perform(get("/subscriptions/summary").header("Authorization", "Bearer " + volunteerToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.totalHours").value(1.5));
+    }
+
+    @Test
+    void summaryReturnsEmptyListsAndZeroHoursForAVolunteerWithNoSubscriptions() throws Exception {
+        String volunteerToken = register("sub-volunteer", "VOLUNTEER");
+
+        mockMvc.perform(get("/subscriptions/summary").header("Authorization", "Bearer " + volunteerToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.upcomingEvents.length()").value(0))
+            .andExpect(jsonPath("$.pastEvents.length()").value(0))
+            .andExpect(jsonPath("$.totalHours").value(0.0));
+    }
+
+    @Test
+    void summaryOnlyIncludesTheCallersOwnSubscriptions() throws Exception {
+        String promoterToken = register("sub-promoter", "PROMOTER");
+        String volunteerToken = register("sub-volunteer", "VOLUNTEER");
+        String otherVolunteerToken = register("sub-volunteer-other", "VOLUNTEER");
+        long eventId = createEvent(promoterToken, 5);
+
+        mockMvc.perform(post("/subscriptions/" + eventId).header("Authorization", "Bearer " + volunteerToken))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(get("/subscriptions/summary").header("Authorization", "Bearer " + otherVolunteerToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.upcomingEvents.length()").value(0));
+    }
 }

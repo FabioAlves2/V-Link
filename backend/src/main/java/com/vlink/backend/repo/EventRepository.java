@@ -23,12 +23,15 @@ public interface EventRepository extends JpaRepository<Event, Long> {
         e.endDate >= :now AND
         (:location IS NULL OR LOWER(e.location) LIKE LOWER(CONCAT('%', :location, '%'))) AND
         (:date IS NULL OR CAST(e.startDate AS date) = :date) AND
-        (:type IS NULL OR e.type = :type)
+        (:type IS NULL OR e.type = :type) AND
+        (:keyword IS NULL OR LOWER(e.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                          OR LOWER(e.description) LIKE LOWER(CONCAT('%', :keyword, '%')))
     """)
     List<Event> findByFilters(
         @Param("location") String location,
         @Param("date") LocalDate date,
         @Param("type") Event.Type type,
+        @Param("keyword") String keyword,
         @Param("now") LocalDateTime now
     );
 

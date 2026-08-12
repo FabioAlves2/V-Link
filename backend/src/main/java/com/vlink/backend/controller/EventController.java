@@ -5,9 +5,11 @@ import com.vlink.backend.model.Notification;
 import com.vlink.backend.model.Subscription;
 import com.vlink.backend.model.User;
 import com.vlink.backend.repo.EventRepository;
+import com.vlink.backend.repo.FavoriteRepository;
 import com.vlink.backend.repo.NotificationRepository;
 import com.vlink.backend.repo.SubscriptionRepository;
 import com.vlink.backend.repo.UserRepository;
+import com.vlink.backend.service.EmailService;
 import com.vlink.backend.service.FileStorageService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -33,21 +35,24 @@ public class EventController {
     private final SubscriptionRepository subscriptionRepo;
     private final UserRepository userRepo;
     private final NotificationRepository notificationRepo;
+    private final FavoriteRepository favoriteRepo;
     private final FileStorageService fileStorageService;
+    private final EmailService emailService;
 
     private Event withSubscriberCount(Event event) {
         event.setSubscriberCount((int) subscriptionRepo.countByEventId(event.getId()));
         return event;
     }
 
-    // GET /events?location=porto&date=2025-06-01&type=LIMPEZA  (todos opcionais)
+    // GET /events?location=porto&date=2025-06-01&type=LIMPEZA&keyword=praia  (todos opcionais)
     @GetMapping
     public List<Event> getEvents(
         @RequestParam(required = false) String location,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-        @RequestParam(required = false) Event.Type type
+        @RequestParam(required = false) Event.Type type,
+        @RequestParam(required = false) String keyword
     ) {
-        List<Event> events = repo.findByFilters(location, date, type, LocalDateTime.now());
+        List<Event> events = repo.findByFilters(location, date, type, keyword, LocalDateTime.now());
         events.forEach(this::withSubscriberCount);
         return events;
     }
@@ -159,7 +164,13 @@ public class EventController {
             // encerrar/despublicar na mesma chamada: saved.getStatus() já não é PUBLISHED nesses casos.
             boolean rescheduled = wasPublished && saved.getStatus() == Event.Status.PUBLISHED
                 && (!saved.getStartDate().equals(oldStart) || !saved.getEndDate().equals(oldEnd));
-            if (rescheduled) notifySubscribersOfReschedule(saved, oldStart, oldEnd);
+            // Sem isto, quem já tinha recebido o lembrete de "vai começar em breve" para o
+            // horário antigo nunca seria avisado para o novo — o reminderSentAt sobrevive ao
+            // reagendamento porque a Subscription não é recriada, só o Event é atualizado.
+            if (rescheduled) {
+                notifySubscribersOfReschedule(saved, oldStart, oldEnd);
+                subscriptionRepo.clearReminderSentAt(saved.getId());
+            }
             return ResponseEntity.ok(withSubscriberCount(saved));
         }).orElse(ResponseEntity.notFound().build());
     }
@@ -215,6 +226,7 @@ public class EventController {
             n.setCreatedAt(now);
             return n;
         }).toList());
+        subs.forEach(s -> emailService.sendEventClosureEmail(s.getUser(), event));
     }
 
     // DELETE /events/{id}  (só o PROMOTER que criou o evento)
@@ -239,6 +251,7 @@ public class EventController {
             if (cancellingUpcoming) notifySubscribersOfCancellation(event);
             notificationRepo.detachEvent(id);
             subscriptionRepo.deleteByEventId(id);
+            favoriteRepo.deleteByEventId(id);
             fileStorageService.deleteEventImages(id);
             repo.delete(event);
             return ResponseEntity.noContent().build();
@@ -258,5 +271,6 @@ public class EventController {
             n.setCreatedAt(now);
             return n;
         }).toList());
+        subs.forEach(s -> emailService.sendEventCancellationEmail(s.getUser(), event));
     }
 }

@@ -18,24 +18,25 @@ Monorepo with two independent apps that only talk over HTTP:
 - Build: `mvnw.cmd clean package`. All tests: `mvnw.cmd test` (no `JWT_SECRET` needed — `src/test/resources/application.properties` overrides it). Single test: `mvnw.cmd test -Dtest=ClassName#methodName`.
 - H2 console (dev only): `http://localhost:8080/h2` — `jdbc:h2:mem:vlinkdb;MODE=PostgreSQL;DB_CLOSE_DELAY=-1`, user `sa`, no password. Gated to `ROLE_PROMOTER`.
 - `dev` profile is default; `prod` expects Postgres at `localhost:5432/vmp` (user/pass `vmp`).
-- **Schema is owned by Flyway, not Hibernate** — both profiles run `ddl-auto: validate`. Migrations in `backend/src/main/resources/db/migration/` (`V1`–`V5`). **Gotcha**: H2 (even in `MODE=PostgreSQL`) rejects multi-column `ALTER TABLE ... ADD COLUMN a, ADD COLUMN b` in one statement — split into separate statements per column.
+- **Schema is owned by Flyway, not Hibernate** — both profiles run `ddl-auto: validate`. Migrations in `backend/src/main/resources/db/migration/` (`V1`–`V7`). **Gotcha**: H2 (even in `MODE=PostgreSQL`) rejects multi-column `ALTER TABLE ... ADD COLUMN a, ADD COLUMN b` in one statement — split into separate statements per column.
+- Email is off by default everywhere except prod (`app.mail.enabled`) — no SMTP server needed for dev or tests. `EmailService` logs and returns instead of touching `JavaMailSender`.
 - Uploaded event images live on local disk under `app.upload.dir` (`./uploads`, gitignored); tests point it at a tmpdir instead.
 - **Spring Boot DevTools** needs a recompile (`./mvnw -q compile`) to hot-restart a running `spring-boot:run` process. For schema-affecting changes, kill and relaunch fully instead (H2 is in-memory; a same-JVM restart tries to `ALTER TABLE` around existing rows). PID via `netstat -ano | grep ":8080"`, kill via `taskkill //F //PID <pid>`.
 - **H2 is wiped on every backend restart** — re-register test accounts after any restart.
 
 ### Frontend (`frontend/`)
 - `npm install`, `npm run dev` (port `5173` — the only origin the backend's CORS allows), `npm run build`, `npm run lint`, `npm run test` (Vitest + RTL, jsdom).
-- Test coverage: `Login.jsx`, `EventList.jsx`, `OrganizerDashboard.jsx`, `EventSubscribers.jsx`, `EventEdit.jsx`, `MySubscriptions.jsx`, `Event.jsx`, `CreateEvent.jsx`, `Navbar.jsx` (notifications), `utils/csv.js`.
+- Test coverage: `Login.jsx`, `EventList.jsx`, `OrganizerDashboard.jsx`, `EventSubscribers.jsx`, `EventEdit.jsx`, `MySubscriptions.jsx`, `MyFavorites.jsx`, `VolunteerDashboard.jsx`, `Event.jsx`, `CreateEvent.jsx`, `Navbar.jsx` (notifications + anonymous header), `axiosConfig.js` (401/refresh interceptor), `utils/csv.js`.
 - MUI's `required` prop adds `*` to labels — use `getByLabelText("Email", { exact: false })`. For a `<TextField select>`'s options: `userEvent.click` the combobox to open it, then query `within(screen.getByRole("listbox")).getAllByRole("option")`.
 
 ## Architecture
 
 ### Backend package layout (`com.vlink.backend`)
-- `model` — JPA entities (`User`, `Event`, `Subscription`, `RefreshToken`, `Notification`)
+- `model` — JPA entities (`User`, `Event`, `Subscription`, `RefreshToken`, `Notification`, `Favorite`)
 - `repo` — Spring Data repositories
-- `controller` — `AuthController`, `EventController`, `SubscriptionController`, `EventSubscriberController`, `NotificationController`
+- `controller` — `AuthController`, `EventController`, `SubscriptionController`, `EventSubscriberController`, `NotificationController`, `FavoriteController`
 - `dto` — request/response records, bean-validated
-- `service` — `FileStorageService`
+- `service` — `FileStorageService`, `EmailService`, `EventReminderScheduler`
 - `auth` — `JwtUtil`, `JwtAuthFilter`, `LoginAttemptService`, `RegisterAttemptService`
 - `validation` — `@ValidEventDates` / `EventDatesValidator`
 - `config` — `SecurityConfig`, `WebConfig`
@@ -69,7 +70,7 @@ There used to be a `UserController` at `/api/users` — deleted. It deserialized
 - Access token 15 min, refresh token 7 days, both carry `role`/`type`/`jti`. Every refresh issuance persists a `RefreshToken` row.
 - `/auth/refresh` checks the row isn't revoked/expired, then rotates (revoke old, persist new). `/auth/logout` revokes best-effort (never errors, even on a malformed/expired token).
 - `JwtAuthFilter` populates `SecurityContextHolder` straight from token claims, no per-request DB lookup — parses the signature exactly once via `JwtUtil.parseValidClaims` (don't reintroduce separate re-verifying calls).
-- Two roles: `VOLUNTEER`, `PROMOTER`. `SecurityConfig`: `POST`/`PUT`/`DELETE /events/**`, `GET /events/mine`, `GET /events/*/subscribers`, `/h2/**` → `ROLE_PROMOTER`; `/auth/me`, `/subscriptions/**`, `/notifications/**` → any authenticated user; `GET /events`, `GET /events/{id}`, `GET /uploads/**`, `/auth/login|register|refresh|logout` → public.
+- Two roles: `VOLUNTEER`, `PROMOTER`. `SecurityConfig`: `POST`/`PUT`/`DELETE /events/**`, `GET /events/mine`, `GET /events/*/subscribers`, `/h2/**` → `ROLE_PROMOTER`; `/auth/me`, `/subscriptions/**`, `/notifications/**`, `/favorites/**` → any authenticated user; `GET /events`, `GET /events/{id}`, `GET /uploads/**`, `/auth/login|register|refresh|logout` → public. **`GET /events/{id}` being public is what makes the public event detail page (`Event.jsx`, unauthenticated) work — nothing to change server-side for that page.**
 - Frontend (`axiosConfig.js`) stores both tokens in `localStorage`, injects the access token, and on `401` transparently refreshes + queues/retries in-flight requests (skipped for `/auth/*` requests). `authContext.jsx` decodes the JWT client-side for `role` (never calls `/auth/me`); `logout()` clears `localStorage` synchronously, then calls `/auth/logout` best-effort.
 
 ### Events
@@ -83,9 +84,10 @@ There used to be a `UserController` at `/api/users` — deleted. It deserialized
 - `PUT` rejects reducing `capacity` below the current subscriber count (would render "vagas disponíveis" negative).
 - **Rescheduling** a `PUBLISHED` event's dates while it has subscribers notifies them (`notifySubscribersOfReschedule`) — only when it *stays* `PUBLISHED` and dates actually changed (exact `LocalDateTime` equality, so tests must reuse persisted date strings rather than recomputing "now + N hours" a second time).
 - `EventRepository.findByFilters` (backs `GET /events`) is hardcoded to `status = 'PUBLISHED' AND endDate >= :now` — **`PUBLISHED` does not mean "still happening"**; nothing auto-closes an event once its `endDate` passes, so the date filter matters independently of status. `GET /events/{id}` and `GET /events/mine` are deliberately unfiltered (direct links, organizer dashboard). The same `endDate < now` check gates `subscribe`/`unsubscribe` (see Subscriptions) — deliberately not the close/cancel guards, which key off `startDate` instead. `Event.jsx` mirrors this client-side (`canModifySubscription = status === "PUBLISHED" && !isPast`), showing a disabled "Inscrito ✓" badge or an info alert instead of a button the server would reject.
+- **`findByFilters` also takes an optional `keyword`** (Milestone 3), OR-matched against `LOWER(title)`/`LOWER(description)` — `description` is nullable, and `LOWER(NULL) LIKE ...` is SQL-null-safe (evaluates to not-matched, no `COALESCE` needed). `EventList.jsx`'s "Pesquisar" field feeds this, wired through the same debounced `filters` state as `location`/`date`/`type`.
 - **"Encerrar" (close, `PUT status:CLOSED`) and "Cancelar" (cancel, `DELETE`) are two different actions, mutually exclusive by timing:**
   - Close requires the event to have *started* (`400` otherwise, checking the persisted `startDate`, not whatever else is bundled into the same request). Notifies subscribers; `Subscription`/`checkedIn` rows are untouched — closed is a permanent historical record.
-  - Cancel is for a `DRAFT` or a `PUBLISHED` event that *hasn't* started — hard-deletes the event, its subscriptions, and its image, notifying subscribers first with a self-contained message (`Notification.event` nulled, survives the deletion). Rejected for an already-started `PUBLISHED` event (close instead) or any `CLOSED` event (never deletable — would destroy `checkedIn` history).
+  - Cancel is for a `DRAFT` or a `PUBLISHED` event that *hasn't* started — hard-deletes the event, its subscriptions, its favorites, and its image, notifying subscribers first with a self-contained message (`Notification.event` nulled, survives the deletion) and, if `app.mail.enabled`, an email. Rejected for an already-started `PUBLISHED` event (close instead) or any `CLOSED` event (never deletable — would destroy `checkedIn` history). **`favoriteRepo.deleteByEventId` in `delete()` is required, not optional** — a `Favorite` row has an FK to `events`, so deleting an event someone favorited throws `DataIntegrityViolationException` without it (a real bug, fixed alongside adding Favorites).
   - Because of this split, `MySubscriptions.jsx` needs no changes for the cancel path (row just disappears with the DB row). The close path did need one — see Subscriptions.
 - Image upload: `POST /events/{id}/image` stores to `/uploads/events/{id}/{uuid}.jpg` via `FileStorageService`; re-uploading deletes the previous file (`deletePreviousImage`, only after the new one saves successfully, safe with null/external legacy URLs).
 
@@ -106,6 +108,20 @@ There used to be a `UserController` at `/api/users` — deleted. It deserialized
 - `DELETE` (unsubscribe) rejects if the event is `CLOSED` **or** already ended (`endDate < now`) — both cases protect `checkedIn` history, since check-in itself has no date guard. `MySubscriptions.jsx`'s `getStatus()` checks `event.status === "CLOSED"` first (label `"encerrado"`, button hidden) before falling back to date math (`"passado"` also hides the button) — gate by real status/dates, never a date-only guess, anywhere in the volunteer-facing UI.
 - `EventController` attaches live `subscriberCount` to every `Event` response.
 - Derived `deleteByX` repo methods need an explicit `@Transactional` (Spring Data's delete-by-derivation calls `remove()`, which needs a transaction).
+- **`GET /subscriptions/summary`** (Milestone 3, backs the Volunteer Dashboard) splits the caller's subscriptions into `upcomingEvents` (`endDate >= now`) and `pastEvents` (`{event, checkedIn}` pairs, `endDate < now` — includes events the volunteer never got checked into, not just attended ones), plus `totalHours`. **Hours only sum `checkedIn=true` past subscriptions** — registering without the promoter confirming attendance contributes zero. Computed in Java (`Duration.between`), not JPQL/SQL, to dodge H2/Postgres date-diff dialect differences. This is a literal-path sibling of `GET /subscriptions/{eventId}`, same precedent as `/events/mine` next to `/events/{id}`.
+
+### Favorites (Milestone 3)
+- `Favorite` (`V6`, unique on `user_id, event_id`) via `FavoriteController` (`GET`/`GET /{eventId}`/`POST`/`DELETE /favorites/{eventId}`) — deliberately modeled as a **separate entity from `Subscription`**, not a flag on it: a favorite is a no-commitment bookmark, with **no status/date/capacity restriction** (you can favorite a `DRAFT`, a `CLOSED`, or an already-ended event) — conflating it with `Subscription` would leak the capacity/state-machine guards into a feature that's supposed to have none.
+- `POST`/`DELETE` are idempotent (mirrors `subscribe`/`unsubscribe`'s forgiving behavior) — no pessimistic lock (nothing scarce to protect).
+- `MyFavorites.jsx` (`/favorites`, any authenticated role) is `MySubscriptions.jsx`'s styling twin — a bookmark toggle with no way to browse back to it isn't usable end-to-end.
+- **Icon convention**: `Event.jsx`'s heart toggle uses `FavoriteBorder`/`Favorite` — **not** the `Bookmark*` icon family, which already means subscribe/unsubscribe on that same page (`BookmarkAdd`/`BookmarkAdded` in `Event.jsx`, `BookmarkRemove` in `MySubscriptions.jsx`). Reusing `Bookmark*` for favorites would visually collide with the subscribe button right next to it.
+
+### Email notifications and reminders (Milestone 3)
+- `EmailService` (best-effort, mirrors `FileStorageService`'s try/swallow idiom) sends signup confirmations (`SubscriptionController.subscribe`, only on a genuinely new subscription — not the idempotent-already-subscribed path), closure emails, and cancellation emails — the last two fire on **both** "Encerrar" and "Cancelar" (see Events), alongside the equivalent in-app `Notification`, not instead of it.
+- **Gated behind `app.mail.enabled`** (`false` by default, `true` in `application-prod.yml`) — when disabled, `EmailService` logs and returns without touching any `JavaMailSender` bean, so `spring-boot-starter-mail`'s autoconfiguration (which only activates when `spring.mail.host` is set) never needs to fire in dev/test. A `MailException` never propagates past `EmailService`.
+- **Reminders**: `EventReminderScheduler` (`@Scheduled`, cron `app.mail.reminder-cron`, default every 15 min) emails subscribers of `PUBLISHED` events starting within `app.mail.reminder-window-hours` (default 24h) who haven't been reminded yet. Dedup via `Subscription.reminderSentAt` (`V7`), **not** a separate tracking table — the subscription row is already the natural 1:1 unit.
+  - Cancel/unsubscribe need no extra handling: the `Subscription` row is deleted, so there's nothing left to remind about.
+  - **Reschedule resets `reminderSentAt` to `null`** (`EventController.update`'s existing `rescheduled` branch calls `subscriptionRepo.clearReminderSentAt`) — the row survives a reschedule (only the `Event` changes), so without this, someone already reminded for the old time would never be reminded for the new one.
 
 ### Validation and error shape
 - `ApiExceptionHandler.handleValidation` → `400` `{"error": "Dados inválidos.", "errors": {field: message}}`.
@@ -117,17 +133,21 @@ There used to be a `UserController` at `/api/users` — deleted. It deserialized
 - `EventControllerTest.createAlreadyStartedEvent(token, status)` creates with future dates then `PUT`s them into the past (update, unlike create, doesn't reject past dates) — use this to simulate "already started."
 - Multipart tests: chain `.file(...)` onto `multipart(url)`, don't pass the file as a vararg to `multipart(url, ...)`.
 - Concurrency tests (`ExecutorService` + `CountDownLatch`) assert the durable invariant (final row/notification count), never the `200`/`409` split — that's timing-dependent and flaky to pin down exactly.
+- **Spring caches the test `ApplicationContext` (and its H2 DB) across test *classes* that share the exact same configuration**, not just across methods within one class — e.g. `EmailNotificationTest` and `EventReminderSchedulerTest` both declare `@SpringBootTest @AutoConfigureMockMvc` + `@MockitoBean EmailService` and end up sharing one context/DB, even though they're different files. A scheduler test that scans a whole table (`EventReminderScheduler` has no per-user scope) can pick up leftover rows from an unrelated class's tests. Scope assertions to the specific entity you created (e.g. `argThat` matching on `event.getId()`), never to a raw global invocation count, for anything that queries broadly like this.
 - Frontend tests mock `api/*.js` modules with `vi.mock`; pages reading a route param render inside `MemoryRouter` + `Routes` with `initialEntries`.
+- `Event.jsx` now calls `useAuth()` — its test file mocks `../context/authContext` (`useAuth: vi.fn()`) with a top-level `beforeEach` defaulting to `{ token: "fake-token" }`; any new test needing anonymous behavior overrides with `{ token: null }`. `axiosConfig.test.js` reaches into `api.interceptors.response.handlers[0].rejected` to unit-test the interceptor directly — the retried request has no real backend to hit, so tests that get that far `.catch(() => {})` the expected network failure rather than asserting on it.
 
 ### Known rough edges
 - Subscription API calls live in `frontend/src/api/user.js`, not `event.js`, despite operating on events.
-- `ApiExceptionHandler` classifies `DataIntegrityViolationException` by string-sniffing the DB error message (`"email"` vs `"user_id"`+`"event_id"`) — extend this, don't assume, if a new unique constraint is added.
+- `ApiExceptionHandler` classifies `DataIntegrityViolationException` by string-sniffing the DB error message (`"email"` vs `"favorite"` vs `"user_id"`+`"event_id"`). **Order matters**: `favorites` and `subscriptions` share the same `user_id`/`event_id` column names, so the `favorite` check must come before the generic `user_id`+`event_id` one, or a favorites-uniqueness conflict gets misclassified as `SUBSCRIPTION_CONFLICT`. Extend this, don't assume, if a new unique constraint is added — put the more specific check first.
 - `EventList.jsx`'s filters are debounced (400ms) with a request-id guard — route any new filter input through the same `filters` state.
 
 ### Frontend structure
 - `main.jsx` owns the router + MUI theme; authenticated pages render inside a shared `App` layout (`Navbar` + `Outlet`).
-- `ProtectedRoute`/`AuthRoute` are defined inline in `main.jsx`. Promoter-only routes: `/new`, `/events/:id/edit`, `/dashboard`, `/events/:id/subscribers`.
-- `api/axiosConfig.js` hardcodes `baseURL: "http://localhost:8080"` (no env-based config).
+- `ProtectedRoute`/`AuthRoute` are defined inline in `main.jsx`. Promoter-only routes: `/new`, `/events/:id/edit`, `/dashboard`, `/events/:id/subscribers`. `/my-dashboard` (Volunteer Dashboard) and `/favorites` are `ProtectedRoute` with no `requiredRole` — either role can subscribe/favorite.
+- **`events/:id` is deliberately NOT wrapped in `ProtectedRoute`** (Milestone 3, public event detail page) — `Event.jsx` handles the anonymous case itself (gates `isSubscribed`/`isFavorited` on `useAuth().token` existing, shows a sign-in CTA instead of the subscribe/favorite actions). Every other `events/:id/...` sub-route (`edit`, `subscribers`) stays protected — only the bare detail path is public.
+- `components/Navbar.jsx` renders a minimal anonymous variant (logo + "Entrar") instead of `null` when there's no token — needed so a visitor following a shared event link sees *something*, not a blank header.
+- `api/axiosConfig.js` hardcodes `baseURL: "http://localhost:8080"` (no env-based config). **The 401-refresh interceptor checks `localStorage.getItem("refreshToken")` before attempting a refresh** — without that check, an anonymous request to any authenticated endpoint (e.g. `isSubscribed` called from the now-public `Event.jsx`) triggered a doomed refresh attempt ending in a hard `window.location.href = "/login"`, bypassing React Router and breaking the public page regardless of the route itself being open. A real bug, found and fixed as part of Milestone 3.
 - `utils/image.js#resolveImageUrl` prefixes `API_BASE_URL` onto relative `/uploads/...` paths, passes absolute (legacy) URLs through — always use it, never render `event.imageUrl` directly.
 - `utils/csv.js` (`toCsv`/`downloadCsv`) is kept separate from any component so it's unit-testable without stubbing jsdom's blob/anchor machinery.
 - Brand theme (`main.jsx`): deep green `#1B4332`, light green `#52B788`, gold `#D4A853`, cream `#F8F3E6`; Playfair Display headings, DM Sans body.

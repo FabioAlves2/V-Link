@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import Navbar from "./Navbar";
 import { getNotifications, getUnreadCount, markNotificationRead } from "../api/notification";
+import { useAuth } from "../context/authContext";
 
 vi.mock("../api/notification", () => ({
     getNotifications: vi.fn(),
@@ -12,9 +13,7 @@ vi.mock("../api/notification", () => ({
     markAllNotificationsRead: vi.fn(),
 }));
 
-vi.mock("../context/authContext", () => ({
-    useAuth: () => ({ token: "fake-token", role: "VOLUNTEER", logout: vi.fn() }),
-}));
+vi.mock("../context/authContext", () => ({ useAuth: vi.fn() }));
 
 const sampleNotifications = [
     { id: 1, message: 'O evento "Praia Limpa" foi encerrado.', read: false, eventId: 5 },
@@ -33,6 +32,8 @@ describe("Navbar notifications", () => {
         getNotifications.mockReset();
         getUnreadCount.mockReset();
         markNotificationRead.mockReset();
+        useAuth.mockReset();
+        useAuth.mockReturnValue({ token: "fake-token", role: "VOLUNTEER", logout: vi.fn() });
         getUnreadCount.mockResolvedValue({ data: { count: 1 } });
         getNotifications.mockResolvedValue({ data: sampleNotifications });
     });
@@ -63,5 +64,21 @@ describe("Navbar notifications", () => {
         await user.click(notification);
 
         await waitFor(() => expect(markNotificationRead).toHaveBeenCalledWith(1));
+    });
+});
+
+describe("Navbar anonymous view", () => {
+    beforeEach(() => {
+        useAuth.mockReset();
+        useAuth.mockReturnValue({ token: null, role: null, logout: vi.fn() });
+    });
+
+    it("renders a minimal logo + Entrar header when there is no token", () => {
+        renderNavbar();
+
+        expect(screen.getByText("V-Link")).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: /entrar/i })).toBeInTheDocument();
+        expect(screen.queryByText("Eventos")).not.toBeInTheDocument();
+        expect(screen.queryByText("As minhas inscrições")).not.toBeInTheDocument();
     });
 });

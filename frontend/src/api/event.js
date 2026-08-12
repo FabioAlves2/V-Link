@@ -5,6 +5,7 @@ export const getEvents = (filters = {}) => {
     if (filters.location) params.location = filters.location;
     if (filters.date) params.date = filters.date;
     if (filters.type) params.type = filters.type;
+    if (filters.keyword) params.keyword = filters.keyword;
     return api.get("/events", { params });
 };
 

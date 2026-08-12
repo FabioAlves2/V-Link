@@ -12,6 +12,8 @@ import EventList from "./pages/EventList";
 import CreateEvent from "./pages/CreateEvent";
 import EventEdit from "./pages/EventEdit";
 import MySubscriptions from "./pages/MySubscriptions";
+import MyFavorites from "./pages/MyFavorites";
+import VolunteerDashboard from "./pages/VolunteerDashboard";
 import Profile from "./pages/Profile";
 import OrganizerDashboard from "./pages/OrganizerDashboard";
 import EventSubscribers from "./pages/EventSubscribers";
@@ -84,9 +86,13 @@ ReactDOM.createRoot(document.getElementById("root")).render(
             <Route path="/" element={<App />}>
               {/* Voluntário + Promotor */}
               <Route path="events" element={<ProtectedRoute><EventList /></ProtectedRoute>} />
-              <Route path="events/:id" element={<ProtectedRoute><Event /></ProtectedRoute>} />
+              {/* Pública: página de detalhe pode ser vista por um visitante anónimo (link partilhado);
+                  Event.jsx trata internamente o que mostrar sem sessão iniciada. */}
+              <Route path="events/:id" element={<Event />} />
               <Route path="profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
               <Route path="subscriptions" element={<ProtectedRoute><MySubscriptions /></ProtectedRoute>} />
+              <Route path="favorites" element={<ProtectedRoute><MyFavorites /></ProtectedRoute>} />
+              <Route path="my-dashboard" element={<ProtectedRoute><VolunteerDashboard /></ProtectedRoute>} />
 
               {/* Só Promotor */}
               <Route path="new" element={

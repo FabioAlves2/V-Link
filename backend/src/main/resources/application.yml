@@ -9,6 +9,11 @@ spring:
 app:
   upload:
     dir: ./uploads
+  mail:
+    enabled: false
+    from: no-reply@vlink.pt
+    reminder-window-hours: 24
+    reminder-cron: "0 */15 * * * *"
 
 logging:
   level:

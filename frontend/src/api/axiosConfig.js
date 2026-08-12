@@ -36,6 +36,14 @@ api.interceptors.response.use(
             return Promise.reject(error);
         }
 
+        // Sem refreshToken guardado (ex.: visitante anónimo numa página pública que chamou um
+        // endpoint autenticado) uma tentativa de refresh está destinada a falhar — e o catch
+        // abaixo faz um window.location.href = "/login" duro, que rebentava com qualquer acesso
+        // anónimo a uma página pública. Falha já aqui, sem tentar.
+        if (!localStorage.getItem("refreshToken")) {
+            return Promise.reject(error);
+        }
+
         if (isRefreshing) {
             return new Promise((resolve, reject) => {
                 failedQueue.push({ resolve, reject });

@@ -35,7 +35,7 @@ export default function EventList() {
   const navigate = useNavigate();
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ location: "", date: "", type: "" });
+  const [filters, setFilters] = useState({ keyword: "", location: "", date: "", type: "" });
   const latestRequestId = useRef(0);
 
   const fetchEvents = async () => {
@@ -43,6 +43,7 @@ export default function EventList() {
     setLoading(true);
     try {
       const params = {};
+      if (filters.keyword) params.keyword = filters.keyword;
       if (filters.location) params.location = filters.location;
       if (filters.date) params.date = filters.date;
       if (filters.type) params.type = filters.type;
@@ -62,10 +63,10 @@ export default function EventList() {
   }, [filters]);
 
   const clearFilters = () => {
-    setFilters({ location: "", date: "", type: "" });
+    setFilters({ keyword: "", location: "", date: "", type: "" });
   };
 
-  const hasFilters = filters.location || filters.date || filters.type;
+  const hasFilters = filters.keyword || filters.location || filters.date || filters.type;
 
   return (
     <Box sx={{ maxWidth: 1200, mx: "auto", py: 4, px: { xs: 2, md: 0 } }}>
@@ -91,6 +92,14 @@ export default function EventList() {
         boxShadow: "0 2px 16px rgba(27,67,50,0.07)",
         display: "flex", flexWrap: "wrap", gap: 2, alignItems: "flex-end",
       }}>
+        <TextField
+          label="Palavra-chave" size="small" sx={{ minWidth: 200, ...fieldStyle }}
+          value={filters.keyword}
+          onChange={(e) => setFilters(f => ({ ...f, keyword: e.target.value }))}
+          InputProps={{
+            startAdornment: <InputAdornment position="start"><Search sx={{ fontSize: 18, color: "#52B788" }} /></InputAdornment>
+          }}
+        />
         <TextField
           label="Local" size="small" sx={{ minWidth: 180, ...fieldStyle }}
           value={filters.location}

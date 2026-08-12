@@ -56,12 +56,23 @@ Promoters currently have no way to manage what they've created beyond the create
 
 Volunteers currently only have a flat event list and "my subscriptions" — no personalization or follow-through.
 
-- [ ] **New page: Volunteer Dashboard** — upcoming subscribed events, past events attended, total hours volunteered (built on Milestone 2's check-in data)
-- [ ] Feature: email notifications — signup confirmation, reminder before an event starts, cancellation notice if a promoter closes an event
-- [ ] Feature: keyword search across event title/description (current filters are location/date/type only)
-- [ ] Feature: favorite/bookmark an event without subscribing to it
-- [ ] **New page: public event detail page** — viewable without login (read-only), prompting sign-in only when the user tries to subscribe — improves shareability
-- [ ] **Milestone review**: confirm every task above is checked off; re-read the milestone against the current code and note anything that needs to change before moving to Milestone 4
+- [x] **New page: Volunteer Dashboard** — upcoming subscribed events, past events attended, total hours volunteered (built on Milestone 2's check-in data)
+- [x] Feature: email notifications — signup confirmation, reminder before an event starts, cancellation notice if a promoter closes an event
+- [x] Feature: keyword search across event title/description (current filters are location/date/type only)
+- [x] Feature: favorite/bookmark an event without subscribing to it
+- [x] **New page: public event detail page** — viewable without login (read-only), prompting sign-in only when the user tries to subscribe — improves shareability
+- [x] **Milestone review**: confirm every task above is checked off; re-read the milestone against the current code and note anything that needs to change before moving to Milestone 4
+
+  **Review notes (2026-08-08):** All five feature tasks shipped and verified (backend: 40 new MockMvc/unit tests across `SubscriptionControllerTest`, `EventControllerTest`, `FavoriteControllerTest`, `ApiExceptionHandlerTest`, `EmailNotificationTest`, `EmailServiceTest`, `EventReminderSchedulerTest` — 113/113 total; frontend: 21 new Vitest/RTL tests — 59/59 total). Implementation choices, scoped down from the broadest possible version of each task:
+  - **Volunteer Dashboard**'s "hours volunteered" is computed in Java (`Duration.between(startDate, endDate)`), not JPQL/SQL — avoids H2/Postgres date-diff dialect differences, the same portability trap V4's split `ALTER TABLE` already hit once. Hours only count subscriptions with `checkedIn=true`; registering without the promoter confirming attendance contributes zero — confirmed explicitly with the user before implementing.
+  - **Favorites** got a dedicated `Favorite` entity/table (mirrors `Subscription`'s unique-pair shape, V6 migration) rather than reusing `subscriptions` with a flag — a bookmark has no status/date/capacity restriction at all (deliberately, unlike subscribing), so conflating the two models would have meant the capacity/state-machine guards leaking into a feature that's supposed to be commitment-free. Ships with a dedicated "Os meus favoritos" list page (`/favorites`) — a toggle nobody can browse back to isn't usable end-to-end.
+  - **Two real pre-existing bugs found and fixed as part of this milestone**, both required for the public event page to work at all:
+    - `EventController.delete()` never cleaned up a `favorites` row before deleting the event — would have thrown an FK violation the first time anyone deleted an event they'd favorited. Fixed alongside adding favorites (`favoriteRepo.deleteByEventId`), covered by `deletingAnEventWithFavoritesButNoSubscribersSucceeds`.
+    - `axiosConfig.js`'s response interceptor didn't check whether a `refreshToken` existed before reacting to a 401 — an anonymous visitor triggering any authenticated-endpoint 401 (e.g. `isSubscribed`) caused a doomed refresh attempt ending in a hard `window.location.href = "/login"` redirect, bypassing React Router. This silently made a public event page impossible regardless of the route itself being public. Fixed with an early check; `main.jsx`'s `events/:id` route also had to be pulled out of `ProtectedRoute` (a separate, independent blocker).
+  - **Email is entirely best-effort and log-only in dev/test** — gated behind `app.mail.enabled` (default `false`), so `spring-boot-starter-mail`'s autoconfiguration never needs a real SMTP server to boot or to pass tests; a `MailException` never propagates past `EmailService`. Cancellation emails fire on *both* "Encerrar" and "Cancelar" (not just literally "close," per the milestone bullet's wording) — confirmed with the user, since both already trigger the equivalent in-app notification.
+  - **Reminder scheduling** added `@EnableScheduling` + a new `EventReminderScheduler` (`app.mail.reminder-cron`, default every 15 min; `app.mail.reminder-window-hours`, default 24h) — no prior scheduling infra existed. Dedup via a new `reminder_sent_at` column on `subscriptions` (V7) rather than a separate tracking table; explicitly reset to `null` on reschedule (`EventController.update`'s existing reschedule branch) so a volunteer already reminded for the old time still gets reminded for the new one.
+  - **Public event page**: `Event.jsx` itself became the public page (not a separate component) — `GET /events/{id}` was already `permitAll()`, so no backend change was needed for the read side. Anonymous visitors get a sign-in CTA in place of the subscribe/favorite actions instead of a button that would 401. `Navbar.jsx` gained a minimal anonymous variant (logo + "Entrar") instead of rendering nothing, per the shareability goal.
+  - Nothing discovered here changes Milestone 4's scope as written.
 
 ## Milestone 4 — Ship it
 

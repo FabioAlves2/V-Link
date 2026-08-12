@@ -50,7 +50,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/events", "/events/**").hasRole("PROMOTER")
                 .requestMatchers(HttpMethod.PUT, "/events/**").hasRole("PROMOTER")
                 .requestMatchers(HttpMethod.DELETE, "/events/**").hasRole("PROMOTER")
-                .requestMatchers("/auth/me", "/subscriptions/**", "/notifications/**").authenticated()
+                .requestMatchers("/auth/me", "/subscriptions/**", "/notifications/**", "/favorites/**").authenticated()
                 .requestMatchers("/h2/**", "/h2-console/**").hasRole("PROMOTER")
                 .anyRequest().authenticated()
             )

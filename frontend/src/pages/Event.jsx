@@ -2,12 +2,16 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
     Box, Typography, Button, Chip, LinearProgress,
-    Skeleton, Alert
+    Skeleton, Alert, IconButton
 } from "@mui/material";
-import { LocationOn, CalendarToday, People, ArrowBack, BookmarkAdd, BookmarkAdded } from "@mui/icons-material";
-import { isSubscribed, subscribe, unsubscribe } from "../api/user";
+import {
+    LocationOn, CalendarToday, People, ArrowBack,
+    BookmarkAdd, BookmarkAdded, FavoriteBorder, Favorite
+} from "@mui/icons-material";
+import { isSubscribed, subscribe, unsubscribe, isFavorited, favoriteEvent, unfavoriteEvent } from "../api/user";
 import { getEvent } from "../api/event";
 import { resolveImageUrl } from "../utils/image";
+import { useAuth } from "../context/authContext";
 
 const TYPE_LABELS = {
     LIMPEZA: "🧹 Limpeza", DOACAO: "🎁 Doação",
@@ -26,29 +30,46 @@ function formatDateTime(dt) {
 export default function Event() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const { token } = useAuth();
     const [event, setEvent] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [subscribed, setSubscribed] = useState(false);
     const [subLoading, setSubLoading] = useState(false);
     const [subError, setSubError] = useState(null);
+    const [favorited, setFavorited] = useState(false);
+    const [favLoading, setFavLoading] = useState(false);
+    const [favError, setFavError] = useState(null);
 
-    //Carrega evento e verifica se o utilizador está inscrito
+    //Carrega evento (público) e, só com sessão iniciada, verifica se está inscrito/favoritou —
+    //sem token estes pedidos dão 401 e, antes da correção no axiosConfig.js, forçavam um
+    //refresh destinado a falhar seguido de redirect duro para /login.
     useEffect(() => {
         if (!id) return;
         let cancelled = false;
+        // Sem isto, navegar diretamente de um evento para outro (sem desmontar o componente)
+        // mostrava por um instante o estado "Inscrito ✓"/coração preenchido do evento ANTERIOR
+        // sobre o novo, até isSubscribed/isFavorited(id novo) responderem.
+        setSubscribed(false);
+        setFavorited(false);
 
         getEvent(id)
             .then(({ data }) => { if (!cancelled) setEvent(data); })
             .catch(() => { if (!cancelled) setError("Evento não encontrado."); })
             .finally(() => { if (!cancelled) setLoading(false); });
 
-        isSubscribed(id)
-            .then(({ data }) => { if (!cancelled) setSubscribed(data.subscribed); })
-            .catch(() => { });
+        if (token) {
+            isSubscribed(id)
+                .then(({ data }) => { if (!cancelled) setSubscribed(data.subscribed); })
+                .catch(() => { });
+
+            isFavorited(id)
+                .then(({ data }) => { if (!cancelled) setFavorited(data.favorited); })
+                .catch(() => { });
+        }
 
         return () => { cancelled = true; };
-    }, [id]);
+    }, [id, token]);
 
 
     //Subscrever/Cancelar inscrição
@@ -69,6 +90,26 @@ export default function Event() {
             setSubError(err.response?.data?.error || "Não foi possível concluir a operação. Tenta novamente.");
         } finally {
             setSubLoading(false);
+        }
+    };
+
+    //Favoritar/Desfavoritar — bookmark sem compromisso, independente da inscrição
+    const handleToggleFavorite = async () => {
+        if (!token) { navigate("/login"); return; }
+        setFavLoading(true);
+        setFavError(null);
+        try {
+            if (favorited) {
+                await unfavoriteEvent(id);
+                setFavorited(false);
+            } else {
+                await favoriteEvent(id);
+                setFavorited(true);
+            }
+        } catch (err) {
+            setFavError(err.response?.data?.error || "Não foi possível concluir a operação. Tenta novamente.");
+        } finally {
+            setFavLoading(false);
         }
     };
 
@@ -113,6 +154,7 @@ export default function Event() {
 
             {/* Imagem */}
             <Box sx={{
+                position: "relative",
                 borderRadius: "20px", overflow: "hidden",
                 height: { xs: 220, md: 380 }, mb: 4,
                 boxShadow: "0 8px 32px rgba(27,67,50,0.15)",
@@ -122,7 +164,21 @@ export default function Event() {
                     alt={event.title}
                     style={{ width: "100%", height: "100%", objectFit: "cover" }}
                 />
+                <IconButton
+                    onClick={handleToggleFavorite}
+                    disabled={favLoading}
+                    aria-label={favorited ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+                    sx={{
+                        position: "absolute", top: 12, right: 12,
+                        backgroundColor: "rgba(255,255,255,0.9)",
+                        "&:hover": { backgroundColor: "#fff" },
+                    }}
+                >
+                    {favorited ? <Favorite sx={{ color: "#E53E3E" }} /> : <FavoriteBorder sx={{ color: "#1B4332" }} />}
+                </IconButton>
             </Box>
+
+            {favError && <Alert severity="error" sx={{ mb: 3, borderRadius: "10px" }}>{favError}</Alert>}
 
             {/* Conteúdo */}
             <Box sx={{
@@ -242,7 +298,19 @@ export default function Event() {
                 {subError && <Alert severity="error" sx={{ mb: 2, borderRadius: "10px" }}>{subError}</Alert>}
 
                 {/* Botão subscrever */}
-                {canModifySubscription ? (
+                {!token && canModifySubscription ? (
+                    <Button
+                        variant="contained" size="large" fullWidth
+                        onClick={() => navigate("/login")}
+                        sx={{
+                            py: 1.6, fontSize: "1rem", fontWeight: 600,
+                            backgroundColor: "#1B4332",
+                            "&:hover": { backgroundColor: "#0A2318" },
+                        }}
+                    >
+                        Inicia sessão para te inscreveres
+                    </Button>
+                ) : canModifySubscription ? (
                     <Button
                         variant={subscribed ? "outlined" : "contained"}
                         size="large" fullWidth

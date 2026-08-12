@@ -580,4 +580,118 @@ class EventControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$").isEmpty());
     }
+
+    private long createEventWithTitleAndDescription(String promoterToken, String title, String description,
+            String location, String type, String status) throws Exception {
+        String descriptionJson = description == null ? "null" : "\"" + description + "\"";
+        String body = "{\"title\":\"%s\",\"description\":%s,\"location\":\"%s\",\"capacity\":5,\"startDate\":\"%s\",\"endDate\":\"%s\",\"status\":\"%s\",\"type\":\"%s\"}"
+            .formatted(title, descriptionJson, location, futureDate(24), futureDate(26), status, type);
+        String created = mockMvc.perform(post("/events").header("Authorization", "Bearer " + promoterToken)
+                .contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isCreated())
+            .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(created).get("id").asLong();
+    }
+
+    @Test
+    void keywordFilterMatchesTitle() throws Exception {
+        String promoterToken = registerPromoter();
+        String matchTitle = "Limpeza da Praia " + UUID.randomUUID().toString().substring(0, 8);
+        String otherTitle = "Evento Qualquer " + UUID.randomUUID().toString().substring(0, 8);
+        createEventWithTitleAndDescription(promoterToken, matchTitle, null, "Porto", "OUTRO", "PUBLISHED");
+        createEventWithTitleAndDescription(promoterToken, otherTitle, null, "Porto", "OUTRO", "PUBLISHED");
+
+        mockMvc.perform(get("/events").param("keyword", "praia"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString(matchTitle)))
+            .andExpect(content().string(not(containsString(otherTitle))));
+    }
+
+    @Test
+    void keywordFilterMatchesDescription() throws Exception {
+        String promoterToken = registerPromoter();
+        String title = "Evento " + UUID.randomUUID().toString().substring(0, 8);
+        long eventId = createEventWithTitleAndDescription(promoterToken, title,
+            "Uma tarde dedicada à reciclagem de resíduos.", "Porto", "OUTRO", "PUBLISHED");
+
+        mockMvc.perform(get("/events").param("keyword", "reciclagem"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[?(@.id == " + eventId + ")]").exists());
+    }
+
+    @Test
+    void keywordFilterIsCaseInsensitive() throws Exception {
+        String promoterToken = registerPromoter();
+        String title = "Limpeza da Praia " + UUID.randomUUID().toString().substring(0, 8);
+        long eventId = createEventWithTitleAndDescription(promoterToken, title, null, "Porto", "OUTRO", "PUBLISHED");
+
+        mockMvc.perform(get("/events").param("keyword", "PRAIA"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[?(@.id == " + eventId + ")]").exists());
+    }
+
+    @Test
+    void keywordFilterCombinesWithLocationAndType() throws Exception {
+        String promoterToken = registerPromoter();
+        String matchTitle = "Praia Limpa " + UUID.randomUUID().toString().substring(0, 8);
+        long matchId = createEventWithTitleAndDescription(promoterToken, matchTitle, null, "Lisboa", "AMBIENTE", "PUBLISHED");
+        // mesma keyword no título, mas localização/tipo diferentes — não deve aparecer com os três filtros juntos
+        String sameKeywordDifferentLocationTitle = "Praia Bonita " + UUID.randomUUID().toString().substring(0, 8);
+        createEventWithTitleAndDescription(promoterToken, sameKeywordDifferentLocationTitle, null, "Porto", "SOCIAL", "PUBLISHED");
+
+        mockMvc.perform(get("/events")
+                .param("keyword", "praia").param("location", "Lisboa").param("type", "AMBIENTE"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[?(@.id == " + matchId + ")]").exists())
+            .andExpect(jsonPath("$.length()").value(1));
+    }
+
+    @Test
+    void eventsWithNullDescriptionAreExcludedWhenKeywordDoesNotMatchTitle() throws Exception {
+        String promoterToken = registerPromoter();
+        String title = "Sem descrição " + UUID.randomUUID().toString().substring(0, 8);
+        long eventId = createEventWithTitleAndDescription(promoterToken, title, null, "Porto", "OUTRO", "PUBLISHED");
+
+        // Palavra que não está no título e não pode estar na descrição (é null) — a query não
+        // deve rebentar com LOWER(NULL) LIKE ..., deve simplesmente excluir o evento.
+        mockMvc.perform(get("/events").param("keyword", "inexistente"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[?(@.id == " + eventId + ")]").doesNotExist());
+
+        mockMvc.perform(get("/events").param("keyword", "descrição"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[?(@.id == " + eventId + ")]").exists());
+    }
+
+    @Test
+    void keywordFilterStillExcludesDraftAndAlreadyEndedEvents() throws Exception {
+        String promoterToken = registerPromoter();
+        String keyword = "praia" + UUID.randomUUID().toString().substring(0, 8);
+
+        long draftId = createEventWithTitleAndDescription(promoterToken, "Draft " + keyword, null, "Porto", "OUTRO", "DRAFT");
+
+        String endedTitle = "Terminado " + keyword;
+        long endedId = createEventWithTitleAndDescription(promoterToken, endedTitle, null, "Porto", "OUTRO", "PUBLISHED");
+        String moveToPastBody = "{\"title\":\"%s\",\"location\":\"Porto\",\"capacity\":5,\"startDate\":\"%s\",\"endDate\":\"%s\",\"status\":\"PUBLISHED\",\"type\":\"OUTRO\"}"
+            .formatted(endedTitle, futureDate(-4), futureDate(-2));
+        mockMvc.perform(put("/events/" + endedId).header("Authorization", "Bearer " + promoterToken)
+                .contentType(MediaType.APPLICATION_JSON).content(moveToPastBody))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(get("/events").param("keyword", keyword))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[?(@.id == " + draftId + ")]").doesNotExist())
+            .andExpect(jsonPath("$[?(@.id == " + endedId + ")]").doesNotExist());
+    }
+
+    @Test
+    void getEventByIdSucceedsForAGenuinelyAnonymousRequestWithNoAuthorizationHeader() throws Exception {
+        String promoterToken = registerPromoter();
+        long eventId = createEvent(promoterToken, "PUBLISHED");
+
+        // Sem cabeçalho Authorization — a página pública de detalhe (Feature 5) depende disto.
+        mockMvc.perform(get("/events/" + eventId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(eventId));
+    }
 }
