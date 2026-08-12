@@ -6,6 +6,9 @@ import com.vlink.backend.model.Event;
 import com.vlink.backend.model.Subscription;
 import com.vlink.backend.repo.EventRepository;
 import com.vlink.backend.repo.SubscriptionRepository;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -20,11 +23,14 @@ import java.util.Map;
 @RestController
 @RequestMapping("/events")
 @RequiredArgsConstructor
+@Tag(name = "Inscritos do Evento", description = "Vista do promotor sobre quem se inscreveu num evento seu, e marcação de presença.")
+@SecurityRequirement(name = "bearerAuth")
 public class EventSubscriberController {
 
     private final EventRepository eventRepo;
     private final SubscriptionRepository subscriptionRepo;
 
+    @Operation(summary = "Lista os inscritos de um evento (só o promotor que o criou).")
     @GetMapping("/{eventId}/subscribers")
     public ResponseEntity<?> getSubscribers(@PathVariable Long eventId, Authentication auth) {
         return eventRepo.findById(eventId).map(event -> {
@@ -36,6 +42,7 @@ public class EventSubscriberController {
         }).orElse(ResponseEntity.notFound().build());
     }
 
+    @Operation(summary = "Marca/desmarca a presença de um inscrito (só o promotor que criou o evento).")
     @PutMapping("/{eventId}/subscribers/{userId}/attendance")
     public ResponseEntity<?> setAttendance(
         @PathVariable Long eventId, @PathVariable Long userId,

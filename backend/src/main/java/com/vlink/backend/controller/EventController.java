@@ -11,6 +11,9 @@ import com.vlink.backend.repo.SubscriptionRepository;
 import com.vlink.backend.repo.UserRepository;
 import com.vlink.backend.service.EmailService;
 import com.vlink.backend.service.FileStorageService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -29,6 +32,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/events")
 @RequiredArgsConstructor
+@Tag(name = "Eventos", description = "Publicação, edição e listagem de eventos de voluntariado.")
 public class EventController {
 
     private final EventRepository repo;
@@ -45,6 +49,7 @@ public class EventController {
     }
 
     // GET /events?location=porto&date=2025-06-01&type=LIMPEZA&keyword=praia  (todos opcionais)
+    @Operation(summary = "Lista eventos publicados e ainda não terminados. Filtros opcionais e combináveis.")
     @GetMapping
     public List<Event> getEvents(
         @RequestParam(required = false) String location,
@@ -58,6 +63,8 @@ public class EventController {
     }
 
     // GET /events/mine  (só PROMOTER — os eventos do próprio, incluindo rascunhos)
+    @Operation(summary = "Lista todos os eventos do promotor autenticado, incluindo rascunhos e encerrados.")
+    @SecurityRequirement(name = "bearerAuth")
     @GetMapping("/mine")
     public List<Event> myEvents(Authentication auth) {
         List<Event> events = repo.findByOrganizerEmail(auth.getName());
@@ -66,6 +73,7 @@ public class EventController {
     }
 
     // GET /events/{id}
+    @Operation(summary = "Detalhe de um evento — público, incluindo rascunhos/encerrados/já terminados (link direto).")
     @GetMapping("/{id}")
     public ResponseEntity<Event> getEvent(@PathVariable Long id) {
         return repo.findById(id)
@@ -75,6 +83,8 @@ public class EventController {
     }
 
     // POST /events  (só PROMOTER)
+    @Operation(summary = "Cria um evento. Sem status ou status != PUBLISHED, fica como DRAFT (só PROMOTER).")
+    @SecurityRequirement(name = "bearerAuth")
     @PostMapping
     public ResponseEntity<?> create(@Valid @RequestBody Event event, Authentication auth) {
         if (event.getStatus() == Event.Status.CLOSED) {
@@ -94,6 +104,8 @@ public class EventController {
     }
 
     // PUT /events/{id}  (só o PROMOTER que criou o evento)
+    @Operation(summary = "Substitui um evento por completo (full-replace). Transições de status seguem uma máquina de estados — ver CLAUDE.md.")
+    @SecurityRequirement(name = "bearerAuth")
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody Event updated, Authentication auth) {
         return repo.findById(id).map(e -> {
@@ -176,6 +188,8 @@ public class EventController {
     }
 
     // POST /events/{id}/image  (só o PROMOTER que criou o evento)
+    @Operation(summary = "Envia/substitui a imagem de um evento (multipart, máx. 5MB). Remove a imagem anterior após guardar a nova.")
+    @SecurityRequirement(name = "bearerAuth")
     @PostMapping(path = "/{id}/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> uploadImage(@PathVariable Long id, @RequestParam("file") MultipartFile file, Authentication auth) {
         Event event = repo.findById(id).orElse(null);
@@ -232,6 +246,8 @@ public class EventController {
     // DELETE /events/{id}  (só o PROMOTER que criou o evento)
     // Cancela (elimina) um rascunho, ou um evento publicado que ainda não começou. Um evento
     // encerrado ou já em curso não pode ser eliminado — usa PUT para o encerrar em vez disso.
+    @Operation(summary = "Cancela (elimina) um rascunho ou um evento publicado que ainda não começou. Encerrados/já iniciados usam PUT para encerrar em vez disto.")
+    @SecurityRequirement(name = "bearerAuth")
     @DeleteMapping("/{id}")
     @Transactional
     public ResponseEntity<?> delete(@PathVariable Long id, Authentication auth) {

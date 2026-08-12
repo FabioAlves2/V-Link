@@ -46,8 +46,13 @@ Monorepo with two independent apps that only talk over HTTP:
 - `service` — `FileStorageService`, `EmailService`, `EventReminderScheduler`
 - `auth` — `JwtUtil`, `JwtAuthFilter`, `LoginAttemptService`, `RegisterAttemptService`
 - `validation` — `@ValidEventDates` / `EventDatesValidator`
-- `config` — `SecurityConfig`, `WebConfig`
+- `config` — `SecurityConfig`, `WebConfig`, `OpenApiConfig`
 - `api` — `ApiExceptionHandler`
+
+### API documentation (Swagger UI)
+- `springdoc-openapi-starter-webmvc-ui` (pinned to `2.8.6`, not the also-plausible `2.6.0` — that version's `ControllerAdviceBean` usage predates a Spring Framework 6.2 signature change and throws `NoSuchMethodError` at the very first request in, i.e. only surfaces once something actually calls `/v3/api-docs`, not at boot). Swagger UI at `/swagger-ui/index.html`, raw spec at `/v3/api-docs` — both `permitAll` in `SecurityConfig` regardless of profile.
+- **No global `security` requirement on `@OpenAPIDefinition`.** swagger-core can't distinguish `@Operation(security = {})` (explicitly no security) from "attribute not set" — both read as the annotation's own default (`{}`) — so a global default requirement can never be reliably overridden per-endpoint. Every protected controller/method instead carries an explicit `@SecurityRequirement(name = "bearerAuth")` (opt-in, class-level where every method is protected, method-level in `AuthController`/`EventController` where only some are); genuinely public endpoints (`/auth/login|register|refresh|logout`, `GET /events`, `GET /events/{id}`) simply carry no annotation at all. Verified by asserting the actual generated `/v3/api-docs` JSON, not by reading the annotations — the `security = {}` approach looked correct at the Java level and only failed once the JSON was inspected.
+- To try a protected endpoint in Swagger UI: call `/auth/login` or `/auth/register`, copy the `token` field, click **Authorize**, paste it in (no `Bearer ` prefix needed — the `bearerFormat: JWT` scheme adds it).
 
 Entities use Lombok; request/response bodies favor Java records. Every `@RequestBody` in `AuthController`/`EventController` is `@Valid`. `EventController`/`SubscriptionController` return raw entities; `EventSubscriberController`/`NotificationController` map to DTOs (`SubscriberResponse`/`NotificationResponse`) — prefer that pattern for new list/detail endpoints.
 

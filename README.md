@@ -16,6 +16,8 @@ JWT_SECRET=any-string-for-dev ./mvnw spring-boot:run     # Unix
 
 Runs on `http://localhost:8080`. Tests (`mvnw.cmd test`) don't need `JWT_SECRET` set — the test profile overrides it.
 
+**API docs (Swagger UI)**: `http://localhost:8080/swagger-ui/index.html` (OpenAPI JSON at `/v3/api-docs`). Login/register via `/auth/login`/`/auth/register` in the docs, copy the `token` from the response, then click **Authorize** and paste it in to try the protected endpoints.
+
 ### Frontend (`frontend/`)
 ```
 npm install

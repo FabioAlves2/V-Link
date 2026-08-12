@@ -9,6 +9,9 @@ import com.vlink.backend.model.User;
 import com.vlink.backend.repo.RefreshTokenRepository;
 import com.vlink.backend.repo.UserRepository;
 import io.jsonwebtoken.Claims;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +28,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
+@Tag(name = "Autenticação", description = "Registo, login e gestão de sessão (tokens JWT).")
 public class AuthController {
 
     private final JwtUtil jwtUtil;
@@ -43,6 +47,7 @@ public class AuthController {
         refreshTokenRepository.save(rt);
     }
 
+    @Operation(summary = "Regista uma nova conta (voluntário ou promotor) e devolve os tokens de acesso.")
     @PostMapping("/register")
     public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest req, HttpServletRequest httpRequest) {
         String clientIp = httpRequest.getRemoteAddr();
@@ -69,6 +74,7 @@ public class AuthController {
         return ResponseEntity.ok(Map.of("token", access, "refreshToken", refresh));
     }
 
+    @Operation(summary = "Autentica com email/password e devolve um token de acesso e de refresh.")
     @PostMapping("/login")
     public ResponseEntity<?> login(@Valid @RequestBody LoginRequest req) {
         if (loginAttemptService.isBlocked(req.email())) {
@@ -91,6 +97,7 @@ public class AuthController {
             });
     }
 
+    @Operation(summary = "Troca um refresh token válido por um novo par de tokens (rotação).")
     @PostMapping("/refresh")
     public ResponseEntity<?> refresh(@Valid @RequestBody RefreshRequest req) {
         String refreshToken = req.refreshToken();
@@ -114,6 +121,7 @@ public class AuthController {
         return ResponseEntity.ok(Map.of("token", newAccess, "refreshToken", newRefresh));
     }
 
+    @Operation(summary = "Revoga um refresh token (best-effort — nunca falha, mesmo com um token já inválido).")
     @PostMapping("/logout")
     public ResponseEntity<?> logout(@Valid @RequestBody RefreshRequest req) {
         try {
@@ -128,6 +136,8 @@ public class AuthController {
         return ResponseEntity.noContent().build();
     }
 
+    @Operation(summary = "Devolve o nome, email e role do utilizador autenticado.")
+    @SecurityRequirement(name = "bearerAuth")
     @GetMapping("/me")
     public ResponseEntity<?> me(Authentication auth) {
         return userRepository.findByEmail(auth.getName())
@@ -139,6 +149,8 @@ public class AuthController {
             .orElse(ResponseEntity.notFound().build());
     }
 
+    @Operation(summary = "Atualiza o nome e/ou a password do utilizador autenticado (a troca de password exige currentPassword).")
+    @SecurityRequirement(name = "bearerAuth")
     @PutMapping("/me")
     public ResponseEntity<?> updateMe(Authentication auth,
                                        @Valid @RequestBody UpdateProfileRequest req) {

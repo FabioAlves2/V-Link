@@ -9,6 +9,9 @@ import com.vlink.backend.repo.EventRepository;
 import com.vlink.backend.repo.SubscriptionRepository;
 import com.vlink.backend.repo.UserRepository;
 import com.vlink.backend.service.EmailService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +28,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/subscriptions")
 @RequiredArgsConstructor
+@Tag(name = "Inscrições", description = "Inscrever/cancelar inscrição num evento e o painel do voluntário.")
+@SecurityRequirement(name = "bearerAuth")
 public class SubscriptionController {
 
     private final EventRepository eventRepo;
@@ -33,6 +38,7 @@ public class SubscriptionController {
     private final EmailService emailService;
 
     // GET /subscriptions — eventos subscritos pelo utilizador autenticado
+    @Operation(summary = "Lista os eventos a que o utilizador autenticado está inscrito.")
     @GetMapping
     public ResponseEntity<List<Event>> mySubscriptions(Authentication auth) {
         List<Event> events = subscriptionRepo.findByUserEmail(auth.getName())
@@ -48,6 +54,7 @@ public class SubscriptionController {
     // contam subscrições com checkedIn=true — inscrever-se sem o promotor confirmar presença
     // não conta como voluntariado. Calculado em Java (Duration), não em JPQL/SQL, para evitar
     // funções de diferença de datas específicas de dialeto entre H2 e Postgres.
+    @Operation(summary = "Painel do voluntário: próximos eventos, eventos passados e total de horas voluntariadas (só conta presenças confirmadas).")
     @GetMapping("/summary")
     public ResponseEntity<VolunteerDashboardResponse> summary(Authentication auth) {
         LocalDateTime now = LocalDateTime.now();
@@ -79,6 +86,7 @@ public class SubscriptionController {
     }
 
     // GET /subscriptions/{eventId} — verifica se está subscrito
+    @Operation(summary = "Verifica se o utilizador autenticado está inscrito num evento específico.")
     @GetMapping("/{eventId}")
     public ResponseEntity<Map<String, Boolean>> isSubscribed(
             @PathVariable Long eventId, Authentication auth) {
@@ -89,6 +97,7 @@ public class SubscriptionController {
     // POST /subscriptions/{eventId} — subscrever
     // @Transactional + lock pessimista no evento: sem isto, dois pedidos concorrentes podiam
     // ambos passar a verificação de capacidade antes de qualquer um gravar, ultrapassando o limite.
+    @Operation(summary = "Inscreve o utilizador autenticado num evento publicado com vagas disponíveis (idempotente).")
     @Transactional
     @PostMapping("/{eventId}")
     public ResponseEntity<?> subscribe(@PathVariable Long eventId, Authentication auth) {
@@ -129,6 +138,7 @@ public class SubscriptionController {
     // ainda não "Encerrou" manualmente ficava sem esta proteção — check-in não tem guard de
     // data (EventSubscriberController), por isso este é o mesmo buraco do caso CLOSED, só que
     // para eventos que já aconteceram mas nunca foram formalmente fechados.
+    @Operation(summary = "Cancela a inscrição do utilizador autenticado num evento (bloqueado para eventos encerrados/já terminados).")
     @DeleteMapping("/{eventId}")
     public ResponseEntity<?> unsubscribe(@PathVariable Long eventId, Authentication auth) {
         Event event = eventRepo.findById(eventId).orElse(null);

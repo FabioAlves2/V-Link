@@ -8,6 +8,9 @@ import com.vlink.backend.repo.EventRepository;
 import com.vlink.backend.repo.FavoriteRepository;
 import com.vlink.backend.repo.SubscriptionRepository;
 import com.vlink.backend.repo.UserRepository;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +24,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/favorites")
 @RequiredArgsConstructor
+@Tag(name = "Favoritos", description = "Bookmarks sem compromisso — sem restrição de estado/data/capacidade do evento.")
+@SecurityRequirement(name = "bearerAuth")
 public class FavoriteController {
 
     private final EventRepository eventRepo;
@@ -29,6 +34,7 @@ public class FavoriteController {
     private final SubscriptionRepository subscriptionRepo;
 
     // GET /favorites — eventos favoritados pelo utilizador autenticado
+    @Operation(summary = "Lista os eventos favoritados pelo utilizador autenticado.")
     @GetMapping
     public ResponseEntity<List<Event>> myFavorites(Authentication auth) {
         List<Event> events = favoriteRepo.findByUserEmail(auth.getName())
@@ -40,6 +46,7 @@ public class FavoriteController {
     }
 
     // GET /favorites/{eventId} — verifica se está favoritado
+    @Operation(summary = "Verifica se o utilizador autenticado favoritou um evento específico.")
     @GetMapping("/{eventId}")
     public ResponseEntity<FavoriteResponse> isFavorited(@PathVariable Long eventId, Authentication auth) {
         boolean fav = favoriteRepo.existsByUserEmailAndEventId(auth.getName(), eventId);
@@ -48,6 +55,7 @@ public class FavoriteController {
 
     // POST /favorites/{eventId} — favoritar (idempotente; sem restrição de estado/data/capacidade,
     // é só um bookmark, não um compromisso)
+    @Operation(summary = "Favorita um evento (idempotente) — sem restrição de estado, data ou capacidade.")
     @PostMapping("/{eventId}")
     public ResponseEntity<?> favorite(@PathVariable Long eventId, Authentication auth) {
         if (favoriteRepo.existsByUserEmailAndEventId(auth.getName(), eventId))
@@ -75,6 +83,7 @@ public class FavoriteController {
     }
 
     // DELETE /favorites/{eventId} — desfavoritar (idempotente)
+    @Operation(summary = "Remove um evento dos favoritos do utilizador autenticado (idempotente).")
     @DeleteMapping("/{eventId}")
     public ResponseEntity<?> unfavorite(@PathVariable Long eventId, Authentication auth) {
         favoriteRepo.deleteByUserEmailAndEventId(auth.getName(), eventId);
