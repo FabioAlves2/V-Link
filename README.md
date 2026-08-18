@@ -6,6 +6,10 @@ browse, subscribe, and get credited for the hours they actually showed up for.
 Personal project, built solo. Spring Boot API + React SPA, running against Postgres
 under Docker Compose.
 
+|                                     Volunteer event list                                     |                                    Organizer dashboard                                    |
+| :--------------------------------------------------------------------------------------------: | :----------------------------------------------------------------------------------------: |
+| ![Event list, filters and two published events](docs/screenshot-events.png) | ![Organizer dashboard with draft, published and published events](docs/screenshot-dashboard.png) |
+
 ## What it does
 
 **Two roles.** Promoters create, publish, close and cancel events, see who signed up,
