@@ -174,7 +174,13 @@ public class EventController {
             // datas ou capacidade de um evento que já aconteceu (create() já rejeita datas no
             // passado; update() não tinha o equivalente, único ponto de entrada sem esta guarda).
             // "Encerrar" continua permitido depois do fim — é precisamente para isso que serve.
-            if (!closingPublishedEvent && e.getEndDate().isBefore(LocalDateTime.now())) {
+            // A exceção usa "vai ficar CLOSED" (não só "está a transitar para CLOSED"), para não
+            // bloquear um resave idempotente CLOSED->CLOSED (ex.: dois pedidos concorrentes de
+            // "Encerrar" — o perdedor da corrida ao lock otimista já lê o evento com o endDate
+            // reescrito para o passado pelo vencedor; sem esta exceção mais larga, esse perdedor
+            // caía neste 400 em vez do 409 de conflito que concurrentCloseRequestsNeverNotifyTwice
+            // espera).
+            if (updated.getStatus() != Event.Status.CLOSED && e.getEndDate().isBefore(LocalDateTime.now())) {
                 return ResponseEntity.badRequest().body(Map.of("error",
                     "Não é possível editar um evento que já terminou."));
             }
