@@ -13,6 +13,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -135,5 +136,60 @@ class AuthControllerTest {
         mockMvc.perform(post("/auth/refresh").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"refreshToken\":\"%s\"}".formatted(refreshToken)))
             .andExpect(status().isUnauthorized());
+    }
+
+    // Regressão (VULN-002 do security review): um refresh token emitido antes de uma troca de
+    // password continuava válido pelos 7 dias inteiros mesmo depois da troca — a troca de
+    // password é a única forma que um utilizador tem de reagir a um comprometimento suspeito da
+    // conta, e não fazia nada contra um token já roubado.
+    @Test
+    void changingPasswordRevokesRefreshTokensIssuedBeforeTheChange() throws Exception {
+        String email = uniqueEmail("pwchange");
+        JsonNode tokens = register(email, "originalpass1", "VOLUNTEER");
+        String access = tokens.get("token").asText();
+        String refreshToken = tokens.get("refreshToken").asText();
+
+        String changeBody = "{\"password\":\"newpassword2\",\"currentPassword\":\"originalpass1\"}";
+        mockMvc.perform(put("/auth/me").header("Authorization", "Bearer " + access)
+                .contentType(MediaType.APPLICATION_JSON).content(changeBody))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(post("/auth/refresh").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"refreshToken\":\"%s\"}".formatted(refreshToken)))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void loginStillWorksWithTheNewPasswordAfterAChange() throws Exception {
+        String email = uniqueEmail("pwchange-ok");
+        JsonNode tokens = register(email, "originalpass1", "VOLUNTEER");
+        String access = tokens.get("token").asText();
+
+        String changeBody = "{\"password\":\"newpassword2\",\"currentPassword\":\"originalpass1\"}";
+        mockMvc.perform(put("/auth/me").header("Authorization", "Bearer " + access)
+                .contentType(MediaType.APPLICATION_JSON).content(changeBody))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"%s\",\"password\":\"newpassword2\"}".formatted(email)))
+            .andExpect(status().isOk());
+    }
+
+    // Atualizar só o nome (sem trocar a password) não deve tocar nos refresh tokens existentes —
+    // só a troca de password representa uma resposta a um comprometimento suspeito da conta.
+    @Test
+    void updatingOnlyTheNameDoesNotRevokeRefreshTokens() throws Exception {
+        String email = uniqueEmail("namechange");
+        JsonNode tokens = register(email, "originalpass1", "VOLUNTEER");
+        String access = tokens.get("token").asText();
+        String refreshToken = tokens.get("refreshToken").asText();
+
+        mockMvc.perform(put("/auth/me").header("Authorization", "Bearer " + access)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"New Name\"}"))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(post("/auth/refresh").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"refreshToken\":\"%s\"}".formatted(refreshToken)))
+            .andExpect(status().isOk());
     }
 }

@@ -27,10 +27,10 @@ class SecurityConfigRealServerTest {
     @Autowired TestRestTemplate restTemplate;
     @Autowired ObjectMapper objectMapper;
 
-    private String registerVolunteerAndGetToken() throws Exception {
+    private String registerAndGetToken(String role) throws Exception {
         String email = "real-server-" + UUID.randomUUID() + "@example.com";
-        String body = "{\"name\":\"Test\",\"email\":\"%s\",\"password\":\"password123\",\"role\":\"VOLUNTEER\"}"
-            .formatted(email);
+        String body = "{\"name\":\"Test\",\"email\":\"%s\",\"password\":\"password123\",\"role\":\"%s\"}"
+            .formatted(email, role);
         RequestEntity<String> request = RequestEntity.post(URI.create("/auth/register"))
             .header(HttpHeaders.CONTENT_TYPE, "application/json")
             .body(body);
@@ -40,7 +40,7 @@ class SecurityConfigRealServerTest {
 
     @Test
     void authenticatedRequestWithWrongRoleReturnsForbiddenNotUnauthorizedOnARealServer() throws Exception {
-        String volunteerToken = registerVolunteerAndGetToken();
+        String volunteerToken = registerAndGetToken("VOLUNTEER");
 
         RequestEntity<Void> request = RequestEntity.get(URI.create("/events/mine"))
             .header(HttpHeaders.AUTHORIZATION, "Bearer " + volunteerToken)
@@ -48,5 +48,24 @@ class SecurityConfigRealServerTest {
         ResponseEntity<String> response = restTemplate.exchange(request, String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
+    // Regressão (VULN-004 do security review): a consola H2 é gerida por um Servlet real,
+    // separado do DispatcherServlet — só um servidor a sério (não MockMvc) invoca o
+    // redireccionamento genuíno para a página de login da consola. TestRestTemplate liga sempre
+    // via localhost e segue redireccionamentos automaticamente, por isso um 200 final (a própria
+    // página de login da consola) confirma que o acesso local legítimo continua a funcionar; o
+    // caminho "bloqueado a partir de fora" está coberto em SecurityConfigH2ConsoleTest (via
+    // MockMvc, que permite simular um remoteAddr não-loopback).
+    @Test
+    void h2ConsoleIsReachableForAPromoterOnARealLoopbackConnection() throws Exception {
+        String promoterToken = registerAndGetToken("PROMOTER");
+
+        RequestEntity<Void> request = RequestEntity.get(URI.create("/h2"))
+            .header(HttpHeaders.AUTHORIZATION, "Bearer " + promoterToken)
+            .build();
+        ResponseEntity<String> response = restTemplate.exchange(request, String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     }
 }

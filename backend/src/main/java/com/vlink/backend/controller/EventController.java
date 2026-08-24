@@ -73,13 +73,22 @@ public class EventController {
     }
 
     // GET /events/{id}
-    @Operation(summary = "Detalhe de um evento — público, incluindo rascunhos/encerrados/já terminados (link direto).")
+    // Público, incluindo encerrados/já terminados (link direto) — mas NÃO rascunhos: um DRAFT é,
+    // por definição, "ainda não pronto para ser visto", e os ids são sequenciais (IDENTITY), logo
+    // enumeráveis. Sem esta verificação, qualquer pessoa não autenticada conseguia ler o conteúdo
+    // de um rascunho de outro promotor só por adivinhar/percorrer ids.
+    @Operation(summary = "Detalhe de um evento — público (incluindo encerrados/já terminados via link direto); rascunhos só para o promotor que os criou.")
     @GetMapping("/{id}")
-    public ResponseEntity<Event> getEvent(@PathVariable Long id) {
+    public ResponseEntity<Event> getEvent(@PathVariable Long id, Authentication auth) {
         return repo.findById(id)
+            .filter(e -> e.getStatus() != Event.Status.DRAFT || isOwner(e, auth))
             .map(this::withSubscriberCount)
             .map(ResponseEntity::ok)
             .orElse(ResponseEntity.notFound().build());
+    }
+
+    private boolean isOwner(Event event, Authentication auth) {
+        return auth != null && event.getOrganizer().getEmail().equals(auth.getName());
     }
 
     // POST /events  (só PROMOTER)
@@ -99,6 +108,10 @@ public class EventController {
         User organizer = userRepo.findByEmail(auth.getName()).orElseThrow();
         event.setId(null); // impede que um id vindo do cliente transforme isto num update de outro evento
         event.setOrganizer(organizer);
+        // Mesma razão que em update(): imageUrl só deve mudar via POST /events/{id}/image. Sem
+        // isto, um valor com travessia de caminho (ex. "/uploads/../../ficheiro") sobrevivia à
+        // criação e ficava disponível para deletePreviousImage() apagar no próximo upload de imagem.
+        event.setImageUrl(null);
         event.setStatus(event.getStatus() == Event.Status.PUBLISHED ? Event.Status.PUBLISHED : Event.Status.DRAFT);
         return ResponseEntity.status(HttpStatus.CREATED).body(withSubscriberCount(repo.save(event)));
     }

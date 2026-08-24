@@ -164,6 +164,10 @@ public class AuthController {
                         return ResponseEntity.status(401).body(Map.of("error", "Password atual incorreta."));
                     }
                     u.setPassword(passwordEncoder.encode(req.password()));
+                    // Revoga qualquer refresh token emitido antes desta troca — sem isto, um token
+                    // roubado continuava a funcionar pelos 7 dias inteiros mesmo depois do utilizador
+                    // mudar a password especificamente para reagir a um comprometimento suspeito.
+                    refreshTokenRepository.revokeAllForUser(u.getEmail());
                 }
                 userRepository.save(u);
                 return ResponseEntity.ok(Map.of(

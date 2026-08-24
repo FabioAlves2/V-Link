@@ -11,6 +11,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.expression.WebExpressionAuthorizationManager;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -68,7 +69,17 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.PUT, "/events/**").hasRole("PROMOTER")
                 .requestMatchers(HttpMethod.DELETE, "/events/**").hasRole("PROMOTER")
                 .requestMatchers("/auth/me", "/subscriptions/**", "/notifications/**", "/favorites/**").authenticated()
-                .requestMatchers("/h2/**", "/h2-console/**").hasRole("PROMOTER")
+                // Papel sozinho não chega aqui: qualquer conta pode auto-registar-se como PROMOTER
+                // (RegisterRequest.role é escolhido pelo próprio cliente, sem aprovação), e o perfil
+                // "dev" (o único que liga a consola H2) é o perfil ativo por defeito se
+                // SPRING_PROFILES_ACTIVE nunca for definido num deploy real — um esquecimento
+                // operacional, não um bug de código, mas que combinado com o auto-registo dava a
+                // qualquer visitante anónimo da internet uma consola SQL completa sobre a base de
+                // dados em duas chamadas HTTP. Restringir a loopback neutraliza esse cenário por
+                // completo sem tocar no fluxo de desenvolvimento local (que já só acede via
+                // localhost) nem no perfil por defeito.
+                .requestMatchers("/h2/**", "/h2-console/**").access(
+                    new WebExpressionAuthorizationManager("hasRole('PROMOTER') and (hasIpAddress('127.0.0.1') or hasIpAddress('::1'))"))
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)

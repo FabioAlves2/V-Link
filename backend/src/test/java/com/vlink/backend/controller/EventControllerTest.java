@@ -820,4 +820,51 @@ class EventControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.id").value(eventId));
     }
+
+    // Regressão (VULN-001 do security review): ids são sequenciais/enumeráveis, e um DRAFT é por
+    // definição "ainda não pronto para ser visto" — não podia ser lido por quem não é o dono.
+    @Test
+    void draftEventIsNotVisibleToAnAnonymousCaller() throws Exception {
+        String promoterToken = registerPromoter();
+        long draftId = createEvent(promoterToken, "DRAFT");
+
+        mockMvc.perform(get("/events/" + draftId))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void draftEventIsNotVisibleToADifferentAuthenticatedPromoter() throws Exception {
+        String ownerToken = registerPromoter();
+        long draftId = createEvent(ownerToken, "DRAFT");
+        String otherToken = registerPromoter();
+
+        mockMvc.perform(get("/events/" + draftId).header("Authorization", "Bearer " + otherToken))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void draftEventIsStillVisibleToItsOwner() throws Exception {
+        String ownerToken = registerPromoter();
+        long draftId = createEvent(ownerToken, "DRAFT");
+
+        mockMvc.perform(get("/events/" + draftId).header("Authorization", "Bearer " + ownerToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("DRAFT"));
+    }
+
+    // Regressão (VULN-003 do security review): create() copiava um imageUrl vindo do cliente
+    // tal e qual para a entidade, tal como update() fazia antes de ser corrigido — mesma
+    // travessia de caminho possível pelo endpoint irmão. imageUrl só deve mudar via
+    // POST /events/{id}/image.
+    @Test
+    void clientSuppliedImageUrlOnCreateIsIgnored() throws Exception {
+        String promoterToken = registerPromoter();
+        String body = "{\"title\":\"Evento\",\"location\":\"Porto\",\"capacity\":5,\"startDate\":\"%s\",\"endDate\":\"%s\",\"status\":\"PUBLISHED\",\"type\":\"OUTRO\",\"imageUrl\":\"/uploads/../../../etc/whatever\"}"
+            .formatted(futureDate(24), futureDate(26));
+
+        mockMvc.perform(post("/events").header("Authorization", "Bearer " + promoterToken)
+                .contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.imageUrl").value(nullValue()));
+    }
 }
