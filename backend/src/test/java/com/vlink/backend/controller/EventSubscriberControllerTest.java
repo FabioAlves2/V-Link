@@ -45,6 +45,18 @@ class EventSubscriberControllerTest {
         return objectMapper.readTree(created).get("id").asLong();
     }
 
+    // Move um evento PUBLISHED já criado para o passado (mantém-o PUBLISHED) — simula que já
+    // começou, necessário para marcar presença (ver EventSubscriberController.setAttendance).
+    private void moveEventToStarted(String promoterToken, long eventId) throws Exception {
+        String start = LocalDateTime.now().minusHours(2).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        String end = LocalDateTime.now().plusHours(2).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        String body = "{\"title\":\"Subscribers Test Event\",\"location\":\"Porto\",\"capacity\":5,\"startDate\":\"%s\",\"endDate\":\"%s\",\"status\":\"PUBLISHED\",\"type\":\"OUTRO\"}"
+            .formatted(start, end);
+        mockMvc.perform(put("/events/" + eventId).header("Authorization", "Bearer " + promoterToken)
+                .contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isOk());
+    }
+
     private long subscribeAndGetUserId(String promoterToken, String volunteerToken, long eventId) throws Exception {
         mockMvc.perform(post("/subscriptions/" + eventId).header("Authorization", "Bearer " + volunteerToken))
             .andExpect(status().isOk());
@@ -83,6 +95,7 @@ class EventSubscriberControllerTest {
         long eventId = createEvent(promoterToken);
         String volunteerToken = register("subs-volunteer", "VOLUNTEER");
         long userId = subscribeAndGetUserId(promoterToken, volunteerToken, eventId);
+        moveEventToStarted(promoterToken, eventId);
 
         mockMvc.perform(put("/events/" + eventId + "/subscribers/" + userId + "/attendance")
                 .header("Authorization", "Bearer " + promoterToken)
@@ -125,6 +138,26 @@ class EventSubscriberControllerTest {
                 .contentType(MediaType.APPLICATION_JSON).content("{}"))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.errors.checkedIn").exists());
+    }
+
+    @Test
+    void markingAttendanceBeforeEventStartsIsRejected() throws Exception {
+        String promoterToken = register("subs-promoter", "PROMOTER");
+        long eventId = createEvent(promoterToken); // starts in +24h, still in the future
+        String volunteerToken = register("subs-volunteer", "VOLUNTEER");
+        long userId = subscribeAndGetUserId(promoterToken, volunteerToken, eventId);
+
+        mockMvc.perform(put("/events/" + eventId + "/subscribers/" + userId + "/attendance")
+                .header("Authorization", "Bearer " + promoterToken)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"checkedIn\":true}"))
+            .andExpect(status().isBadRequest());
+
+        // Desmarcar (checkedIn:false) não tem essa restrição — não há nada de "presença futura"
+        // a proteger ao desligar o valor.
+        mockMvc.perform(put("/events/" + eventId + "/subscribers/" + userId + "/attendance")
+                .header("Authorization", "Bearer " + promoterToken)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"checkedIn\":false}"))
+            .andExpect(status().isOk());
     }
 
     @Test

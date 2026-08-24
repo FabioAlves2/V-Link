@@ -76,8 +76,9 @@ public class AuthController {
 
     @Operation(summary = "Autentica com email/password e devolve um token de acesso e de refresh.")
     @PostMapping("/login")
-    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest req) {
-        if (loginAttemptService.isBlocked(req.email())) {
+    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest req, HttpServletRequest httpRequest) {
+        String clientIp = httpRequest.getRemoteAddr();
+        if (loginAttemptService.isBlocked(req.email(), clientIp)) {
             return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
                 .body(Map.of("error", "Demasiadas tentativas. Tenta novamente mais tarde."));
         }
@@ -85,14 +86,14 @@ public class AuthController {
         return userRepository.findByEmail(req.email())
             .filter(u -> passwordEncoder.matches(req.password(), u.getPassword()))
             .map(u -> {
-                loginAttemptService.reset(req.email());
+                loginAttemptService.reset(req.email(), clientIp);
                 String access = jwtUtil.generateToken(u.getEmail(), u.getRole());
                 String refresh = jwtUtil.generateRefreshToken(u.getEmail(), u.getRole());
                 persistRefreshToken(u.getEmail(), refresh);
                 return ResponseEntity.ok(Map.of("token", access, "refreshToken", refresh));
             })
             .orElseGet(() -> {
-                loginAttemptService.recordFailure(req.email());
+                loginAttemptService.recordFailure(req.email(), clientIp);
                 return ResponseEntity.status(401).body(Map.of("error", "Credenciais inválidas."));
             });
     }

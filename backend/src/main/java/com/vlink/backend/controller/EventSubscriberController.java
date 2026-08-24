@@ -52,6 +52,14 @@ public class EventSubscriberController {
             ResponseEntity<?> forbidden = checkOwnership(event, auth);
             if (forbidden != null) return forbidden;
             return subscriptionRepo.findByEventIdAndUserId(eventId, userId).<ResponseEntity<?>>map(sub -> {
+                // Presença só faz sentido a partir do início do evento — sem isto, um voluntário
+                // podia ser marcado "presente" (e contar horas em /subscriptions/summary) para um
+                // evento que ainda nem começou. Verificado depois do 404 de "não inscrito" —
+                // a existência da inscrição importa mais do que a data pedida na resposta.
+                if (request.checkedIn() && event.getStartDate().isAfter(LocalDateTime.now())) {
+                    return ResponseEntity.badRequest().body(Map.of("error",
+                        "Não é possível marcar presença antes do evento começar."));
+                }
                 sub.setCheckedIn(request.checkedIn());
                 sub.setCheckedInAt(request.checkedIn() ? LocalDateTime.now() : null);
                 return ResponseEntity.ok(SubscriberResponse.from(subscriptionRepo.save(sub)));

@@ -17,18 +17,23 @@ public class LoginAttemptService {
 
     private final ConcurrentHashMap<String, Attempt> attempts = new ConcurrentHashMap<>();
 
-    public boolean isBlocked(String email) {
-        Attempt a = attempts.get(key(email));
+    // Chave = email + IP, não só o email: só por email, 5 pedidos com password errada de
+    // *qualquer* origem bloqueavam a vítima durante 15 min mesmo com a password certa —
+    // um DoS de conta trivial de disparar por um atacante que nunca soube a password.
+    // Com o IP na chave, o login legítimo da vítima (a partir da rede dela) usa uma chave
+    // diferente da do atacante e não é afetado.
+    public boolean isBlocked(String email, String ip) {
+        Attempt a = attempts.get(key(email, ip));
         if (a == null) return false;
         if (windowExpired(a)) {
-            attempts.remove(key(email));
+            attempts.remove(key(email, ip));
             return false;
         }
         return a.count() >= MAX_ATTEMPTS;
     }
 
-    public void recordFailure(String email) {
-        attempts.compute(key(email), (k, a) -> {
+    public void recordFailure(String email, String ip) {
+        attempts.compute(key(email, ip), (k, a) -> {
             if (a == null || windowExpired(a)) {
                 return new Attempt(1, Instant.now());
             }
@@ -36,15 +41,15 @@ public class LoginAttemptService {
         });
     }
 
-    public void reset(String email) {
-        attempts.remove(key(email));
+    public void reset(String email, String ip) {
+        attempts.remove(key(email, ip));
     }
 
     private boolean windowExpired(Attempt a) {
         return Instant.now().isAfter(a.windowStart().plusSeconds(WINDOW_SECONDS));
     }
 
-    private String key(String email) {
-        return email == null ? "" : email.toLowerCase();
+    private String key(String email, String ip) {
+        return (email == null ? "" : email.toLowerCase()) + "|" + (ip == null ? "" : ip);
     }
 }

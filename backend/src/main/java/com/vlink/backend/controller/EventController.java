@@ -157,6 +157,14 @@ public class EventController {
             }
             boolean closingPublishedEvent = e.getStatus() == Event.Status.PUBLISHED
                 && updated.getStatus() == Event.Status.CLOSED;
+            // Um evento já terminado é histórico — sem isto, o promotor podia reescrever título,
+            // datas ou capacidade de um evento que já aconteceu (create() já rejeita datas no
+            // passado; update() não tinha o equivalente, único ponto de entrada sem esta guarda).
+            // "Encerrar" continua permitido depois do fim — é precisamente para isso que serve.
+            if (!closingPublishedEvent && e.getEndDate().isBefore(LocalDateTime.now())) {
+                return ResponseEntity.badRequest().body(Map.of("error",
+                    "Não é possível editar um evento que já terminou."));
+            }
             boolean wasPublished = e.getStatus() == Event.Status.PUBLISHED;
             LocalDateTime oldStart = e.getStartDate();
             LocalDateTime oldEnd = e.getEndDate();
@@ -167,7 +175,10 @@ public class EventController {
             e.setStartDate(updated.getStartDate());
             e.setEndDate(updated.getEndDate());
             e.setType(updated.getType());
-            e.setImageUrl(updated.getImageUrl());
+            // imageUrl é deliberadamente ignorado aqui — só muda via POST /events/{id}/image.
+            // Aceitar uma string livre do cliente permitia um valor de travessia de caminho
+            // (ex. "/uploads/../../ficheiro") que era depois apagado por deletePreviousImage()
+            // no próximo upload de imagem — eliminação arbitrária de ficheiros fora de uploads/.
             e.setStatus(updated.getStatus());
             Event saved = repo.save(e);
             if (closingPublishedEvent) notifySubscribersOfClosure(saved);

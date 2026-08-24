@@ -62,8 +62,12 @@ public class FileStorageService {
     public void deletePreviousImage(String previousImageUrl) {
         if (previousImageUrl == null || !previousImageUrl.startsWith("/uploads/")) return;
         try {
+            Path root = Paths.get(uploadDir).toAbsolutePath().normalize();
             Path file = Paths.get(uploadDir, previousImageUrl.substring("/uploads/".length()))
                 .toAbsolutePath().normalize();
+            // O prefixo "/uploads/" acima não impede "../" — normalize() resolve-o antes deste
+            // check, por isso é preciso confirmar que o caminho final continua dentro de uploadDir.
+            if (!file.startsWith(root)) return;
             Files.deleteIfExists(file);
         } catch (IOException ignored) {
         }

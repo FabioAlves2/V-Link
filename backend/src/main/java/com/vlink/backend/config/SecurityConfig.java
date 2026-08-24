@@ -49,6 +49,16 @@ public class SecurityConfig {
             )
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/auth/login", "/auth/register", "/auth/refresh", "/auth/logout").permitAll()
+                // Um AccessDeniedException (papel errado) chama response.sendError(403), o que faz
+                // o Tomcat reencaminhar internamente para /error para gerar o corpo do erro — e
+                // esse pedido reencaminhado volta a passar por esta cadeia de filtros. Sem isto,
+                // "/error" cai no anyRequest().authenticated() genérico; como o reencaminhamento
+                // já não tem a autenticação original (fica anónimo), essa segunda verificação nega
+                // outra vez o acesso — mas agora como não-autenticado, e o AuthenticationEntryPoint
+                // (401) sobrepõe-se ao 403 original antes de chegar ao cliente. Só visível num
+                // servidor real (Tomcat) — o MockMvc não reproduz o reencaminhamento /error, por
+                // isso os testes existentes (incl. o que fixa este 403) nunca apanharam isto.
+                .requestMatchers("/error").permitAll()
                 .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()

@@ -239,6 +239,64 @@ class EventControllerTest {
             .andExpect(jsonPath("$.status").value("CLOSED"));
     }
 
+    // Regressão: update() não verificava se o evento já tinha terminado — um promotor podia
+    // reescrever título/datas/capacidade de um evento passado (create() já rejeita datas
+    // passadas; update() não tinha o equivalente).
+    @Test
+    void editingAnAlreadyEndedEventIsRejected() throws Exception {
+        String promoterToken = registerPromoter();
+        long eventId = createEvent(promoterToken, "PUBLISHED");
+        String moveToEndedBody = "{\"title\":\"Já terminado\",\"location\":\"Porto\",\"capacity\":5,\"startDate\":\"%s\",\"endDate\":\"%s\",\"status\":\"PUBLISHED\",\"type\":\"OUTRO\"}"
+            .formatted(futureDate(-4), futureDate(-2));
+        mockMvc.perform(put("/events/" + eventId).header("Authorization", "Bearer " + promoterToken)
+                .contentType(MediaType.APPLICATION_JSON).content(moveToEndedBody))
+            .andExpect(status().isOk());
+
+        String editBody = "{\"title\":\"Reescrito depois do fim\",\"location\":\"Porto\",\"capacity\":999,\"startDate\":\"%s\",\"endDate\":\"%s\",\"status\":\"PUBLISHED\",\"type\":\"OUTRO\"}"
+            .formatted(futureDate(-4), futureDate(-2));
+        mockMvc.perform(put("/events/" + eventId).header("Authorization", "Bearer " + promoterToken)
+                .contentType(MediaType.APPLICATION_JSON).content(editBody))
+            .andExpect(status().isBadRequest());
+    }
+
+    // "Encerrar" continua permitido depois do fim do evento — é precisamente para eventos já
+    // terminados (e nunca formalmente encerrados) que esta ação existe.
+    @Test
+    void closingAnAlreadyEndedEventIsStillAllowed() throws Exception {
+        String promoterToken = registerPromoter();
+        long eventId = createEvent(promoterToken, "PUBLISHED");
+        String moveToEndedBody = "{\"title\":\"Já terminado\",\"location\":\"Porto\",\"capacity\":5,\"startDate\":\"%s\",\"endDate\":\"%s\",\"status\":\"PUBLISHED\",\"type\":\"OUTRO\"}"
+            .formatted(futureDate(-4), futureDate(-2));
+        mockMvc.perform(put("/events/" + eventId).header("Authorization", "Bearer " + promoterToken)
+                .contentType(MediaType.APPLICATION_JSON).content(moveToEndedBody))
+            .andExpect(status().isOk());
+
+        String closeBody = "{\"title\":\"Já terminado\",\"location\":\"Porto\",\"capacity\":5,\"startDate\":\"%s\",\"endDate\":\"%s\",\"status\":\"CLOSED\",\"type\":\"OUTRO\"}"
+            .formatted(futureDate(-4), futureDate(-2));
+        mockMvc.perform(put("/events/" + eventId).header("Authorization", "Bearer " + promoterToken)
+                .contentType(MediaType.APPLICATION_JSON).content(closeBody))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("CLOSED"));
+    }
+
+    // Regressão: um imageUrl vindo do cliente era copiado tal e qual para a entidade — um
+    // valor com travessia de caminho (ex. "/uploads/../../ficheiro") sobrevivia ao PUT e era
+    // depois apagado por FileStorageService.deletePreviousImage() no upload de imagem seguinte
+    // (eliminação arbitrária de ficheiros fora de uploads/). imageUrl só deve mudar via
+    // POST /events/{id}/image.
+    @Test
+    void clientSuppliedImageUrlOnUpdateIsIgnored() throws Exception {
+        String promoterToken = registerPromoter();
+        long eventId = createEvent(promoterToken, "PUBLISHED");
+
+        String maliciousBody = "{\"title\":\"Evento\",\"location\":\"Porto\",\"capacity\":5,\"startDate\":\"%s\",\"endDate\":\"%s\",\"status\":\"PUBLISHED\",\"type\":\"OUTRO\",\"imageUrl\":\"/uploads/../../../etc/whatever\"}"
+            .formatted(futureDate(24), futureDate(26));
+        mockMvc.perform(put("/events/" + eventId).header("Authorization", "Bearer " + promoterToken)
+                .contentType(MediaType.APPLICATION_JSON).content(maliciousBody))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.imageUrl").value(nullValue()));
+    }
+
     @Test
     void updateWithMissingStatusOrTypeIsRejectedInsteadOfSilentlyDefaulting() throws Exception {
         String promoterToken = registerPromoter();
