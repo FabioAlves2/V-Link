@@ -298,7 +298,7 @@ public class EventController {
             notificationRepo.detachEvent(id);
             subscriptionRepo.deleteByEventId(id);
             favoriteRepo.deleteByEventId(id);
-            fileStorageService.deleteEventImages(id);
+            fileStorageService.deleteEventImages(id, event.getImageUrl());
             repo.delete(event);
             return ResponseEntity.noContent().build();
         }).orElse(ResponseEntity.notFound().build());

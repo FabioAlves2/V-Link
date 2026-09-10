@@ -16,7 +16,12 @@ public interface FileStorageService {
 
     String storeEventImage(Long eventId, MultipartFile file);
 
-    void deleteEventImages(Long eventId);
+    // currentImageUrl is unused by the local-disk implementation (it deletes the whole
+    // events/{id} folder), but SupabaseFileStorageService needs it: an event's stored image
+    // key includes a random UUID that can't be reconstructed from eventId alone, and Supabase
+    // Storage's ListObjectsV2 doesn't reliably find objects by prefix to discover it either
+    // (confirmed live — see SupabaseFileStorageService).
+    void deleteEventImages(Long eventId, String currentImageUrl);
 
     void deletePreviousImage(String previousImageUrl);
 }

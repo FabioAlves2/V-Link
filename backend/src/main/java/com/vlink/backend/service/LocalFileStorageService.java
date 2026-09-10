@@ -46,7 +46,8 @@ public class LocalFileStorageService implements FileStorageService {
 
     // Best-effort — uma falha do disco não deve impedir a eliminação do evento na base de dados.
     // Seguro chamar mesmo que a pasta nunca tenha existido (nenhuma imagem foi carregada).
-    public void deleteEventImages(Long eventId) {
+    // currentImageUrl não é necessário aqui — ver FileStorageService.
+    public void deleteEventImages(Long eventId, String currentImageUrl) {
         try {
             Path eventDir = Paths.get(uploadDir, "events", String.valueOf(eventId)).toAbsolutePath().normalize();
             FileSystemUtils.deleteRecursively(eventDir);

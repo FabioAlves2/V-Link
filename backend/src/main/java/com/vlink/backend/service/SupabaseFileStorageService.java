@@ -10,17 +10,12 @@ import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.Delete;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
-import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest;
-import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
-import software.amazon.awssdk.services.s3.model.ObjectIdentifier;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.io.IOException;
 import java.net.URI;
 import java.time.Duration;
-import java.util.List;
 import java.util.UUID;
 
 // Opt-in storage backend (app.storage.provider=supabase, Render only) — event images survive
@@ -86,10 +81,17 @@ public class SupabaseFileStorageService implements FileStorageService {
         return publicUrlBase + "/" + key;
     }
 
-    // Best-effort, same idiom as LocalFileStorageService — a Storage failure shouldn't block
-    // deleting the event itself.
-    public void deleteEventImages(Long eventId) {
-        deleteByPrefix("events/" + eventId + "/");
+    // An event has at most one live image at a time (deletePreviousImage below already removes
+    // the prior one on every re-upload), so "delete this event's images" and "delete this one
+    // known image" are the same operation here — unlike LocalFileStorageService, which can
+    // delete a whole folder without knowing the filename, this needs the exact key. Originally
+    // tried ListObjectsV2-by-prefix + a batch DeleteObjects call instead of taking the URL as a
+    // parameter, but confirmed live against Supabase that ListObjectsV2 doesn't reliably find an
+    // object that a direct GET/DELETE by key can still reach, and the batch DeleteObjects
+    // operation errors outright on this gateway — silently, since both were wrapped in the same
+    // best-effort catch, leaving orphaned images with no visible failure.
+    public void deleteEventImages(Long eventId, String currentImageUrl) {
+        deletePreviousImage(currentImageUrl);
     }
 
     // Best-effort: apaga só o ficheiro anterior. Ignora null/vazio ou um URL fora do nosso
@@ -100,23 +102,6 @@ public class SupabaseFileStorageService implements FileStorageService {
         try {
             String key = previousImageUrl.substring(prefix.length());
             s3Client.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(key).build());
-        } catch (SdkException ignored) {
-        }
-    }
-
-    private void deleteByPrefix(String prefix) {
-        try {
-            List<ObjectIdentifier> toDelete = s3Client
-                .listObjectsV2(ListObjectsV2Request.builder().bucket(bucket).prefix(prefix).build())
-                .contents().stream()
-                .map(o -> ObjectIdentifier.builder().key(o.key()).build())
-                .toList();
-            if (!toDelete.isEmpty()) {
-                s3Client.deleteObjects(DeleteObjectsRequest.builder()
-                    .bucket(bucket)
-                    .delete(Delete.builder().objects(toDelete).build())
-                    .build());
-            }
         } catch (SdkException ignored) {
         }
     }

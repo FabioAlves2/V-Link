@@ -7,13 +7,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
-import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest;
-import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
-import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
-import software.amazon.awssdk.services.s3.model.S3Object;
-
-import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -21,7 +15,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 // Unit tests only — no real network call to Supabase. S3Client is swapped for a mock after
 // construction (same ReflectionTestUtils idiom LocalFileStorageServiceTest uses for uploadDir),
@@ -79,32 +72,27 @@ class SupabaseFileStorageServiceTest {
         verify(s3Client, never()).deleteObject(any(DeleteObjectRequest.class));
     }
 
+    // Regression: the original implementation listed objects under "events/{id}/" via
+    // ListObjectsV2 and batch-deleted the results — confirmed live against Supabase that
+    // ListObjectsV2 doesn't reliably find an object a direct GET/DELETE by key can still reach,
+    // and the batch DeleteObjects operation errors outright on this gateway. Both failures were
+    // silent (wrapped in the same best-effort catch), leaving orphaned images with no visible
+    // failure. deleteEventImages now takes the known current URL and deletes that single key
+    // directly, the same proven path deletePreviousImage already uses.
     @Test
-    void deleteEventImagesDeletesEveryObjectUnderTheEventPrefix() {
-        when(s3Client.listObjectsV2(any(ListObjectsV2Request.class))).thenReturn(
-            ListObjectsV2Response.builder()
-                .contents(
-                    S3Object.builder().key("events/42/a.jpg").build(),
-                    S3Object.builder().key("events/42/b.jpg").build())
-                .build());
+    void deleteEventImagesDeletesTheGivenKeyDirectlyRatherThanListingByPrefix() {
+        service.deleteEventImages(42L, PUBLIC_URL_BASE + "/events/42/some-uuid.jpg");
 
-        service.deleteEventImages(42L);
-
-        ArgumentCaptor<DeleteObjectsRequest> captor = ArgumentCaptor.forClass(DeleteObjectsRequest.class);
-        verify(s3Client).deleteObjects(captor.capture());
-        List<String> deletedKeys = captor.getValue().delete().objects().stream()
-            .map(o -> o.key())
-            .toList();
-        assertThat(deletedKeys).containsExactlyInAnyOrder("events/42/a.jpg", "events/42/b.jpg");
+        ArgumentCaptor<DeleteObjectRequest> captor = ArgumentCaptor.forClass(DeleteObjectRequest.class);
+        verify(s3Client).deleteObject(captor.capture());
+        assertThat(captor.getValue().bucket()).isEqualTo(BUCKET);
+        assertThat(captor.getValue().key()).isEqualTo("events/42/some-uuid.jpg");
     }
 
     @Test
-    void deleteEventImagesDoesNothingWhenTheEventHasNoImages() {
-        when(s3Client.listObjectsV2(any(ListObjectsV2Request.class))).thenReturn(
-            ListObjectsV2Response.builder().contents(List.of()).build());
+    void deleteEventImagesDoesNothingWhenTheEventHasNoImage() {
+        service.deleteEventImages(42L, null);
 
-        service.deleteEventImages(42L);
-
-        verify(s3Client, never()).deleteObjects(any(DeleteObjectsRequest.class));
+        verify(s3Client, never()).deleteObject(any(DeleteObjectRequest.class));
     }
 }
