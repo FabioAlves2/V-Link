@@ -169,6 +169,47 @@ class SubscriptionControllerTest {
         assertEquals(1, subscriptionRepo.countByEventId(eventId), "DB row count must never exceed capacity");
     }
 
+    // Regressão (achado Low do audit de 2026-09-10): duas chamadas verdadeiramente concorrentes
+    // do MESMO utilizador (ex.: duplo clique) podiam ambas passar o exists() antes de qualquer
+    // uma gravar — o lock pessimista no evento só protege a capacidade, não este par
+    // user_id+event_id. Sem o try/catch, a que perdesse a corrida ao constraint único da BD
+    // devolvia um 409 SUBSCRIPTION_CONFLICT em vez de um 200 idempotente — nunca corrompia
+    // dados, mas não era tão previsível como o mesmo cenário em FavoriteController.
+    @Test
+    void concurrentDoubleSubscribeFromTheSameUserIsIdempotent() throws Exception {
+        String promoterToken = register("sub-promoter", "PROMOTER");
+        long eventId = createEvent(promoterToken, 10);
+        String volunteerToken = register("sub-volunteer", "VOLUNTEER");
+
+        int attempts = 8;
+        ExecutorService pool = Executors.newFixedThreadPool(attempts);
+        CountDownLatch ready = new CountDownLatch(attempts);
+        CountDownLatch start = new CountDownLatch(1);
+        AtomicInteger unexpectedStatusCount = new AtomicInteger();
+
+        for (int i = 0; i < attempts; i++) {
+            pool.submit(() -> {
+                try {
+                    ready.countDown();
+                    start.await();
+                    var result = mockMvc.perform(post("/subscriptions/" + eventId)
+                            .header("Authorization", "Bearer " + volunteerToken))
+                        .andReturn();
+                    if (result.getResponse().getStatus() != 200) unexpectedStatusCount.incrementAndGet();
+                } catch (Exception ignored) {
+                }
+            });
+        }
+
+        ready.await();
+        start.countDown();
+        pool.shutdown();
+        pool.awaitTermination(30, TimeUnit.SECONDS);
+
+        assertEquals(0, unexpectedStatusCount.get(), "every concurrent subscribe from the same user must return 200, never 409/500");
+        assertEquals(1, subscriptionRepo.countByEventId(eventId), "exactly one subscription row, no duplicates");
+    }
+
     @Test
     void mySubscriptionsListsOnlyTheCallersEvents() throws Exception {
         String promoterToken = register("sub-promoter", "PROMOTER");

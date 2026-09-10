@@ -135,6 +135,31 @@ class EventControllerTest {
             .andExpect(status().isBadRequest());
     }
 
+    // Regressão (achado Low do audit de 2026-09-10): capacity não tinha limite superior —
+    // Integer.MAX_VALUE era aceite sem erro.
+    @Test
+    void createWithCapacityAboveTenThousandIsRejected() throws Exception {
+        String token = registerPromoter();
+        String body = "{\"title\":\"Huge Capacity\",\"location\":\"Porto\",\"capacity\":2147483647,\"startDate\":\"%s\",\"endDate\":\"%s\"}"
+            .formatted(futureDate(24), futureDate(26));
+
+        mockMvc.perform(post("/events").header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.errors.capacity").exists());
+    }
+
+    @Test
+    void createWithCapacityAtTheTenThousandLimitSucceeds() throws Exception {
+        String token = registerPromoter();
+        String body = "{\"title\":\"Max Capacity\",\"location\":\"Porto\",\"capacity\":10000,\"startDate\":\"%s\",\"endDate\":\"%s\"}"
+            .formatted(futureDate(24), futureDate(26));
+
+        mockMvc.perform(post("/events").header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isCreated());
+    }
+
     @Test
     void createWithPastStartDateIsRejected() throws Exception {
         String token = registerPromoter();

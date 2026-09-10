@@ -2,6 +2,7 @@ package com.vlink.backend.model;
 
 import java.time.LocalDateTime;
 import jakarta.persistence.*;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -32,6 +33,7 @@ public class Event {
     private String location;
 
     @Min(value = 1, message = "A capacidade tem de ser pelo menos 1.")
+    @Max(value = 10000, message = "A capacidade não pode ser superior a 10000.")
     @Column(nullable = false)
     private int capacity = 1;
 

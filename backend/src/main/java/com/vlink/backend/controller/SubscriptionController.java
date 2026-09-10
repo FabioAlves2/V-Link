@@ -9,10 +9,12 @@ import com.vlink.backend.repo.EventRepository;
 import com.vlink.backend.repo.SubscriptionRepository;
 import com.vlink.backend.repo.UserRepository;
 import com.vlink.backend.service.EmailService;
+import com.vlink.backend.service.SubscriptionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -35,6 +37,7 @@ public class SubscriptionController {
     private final EventRepository eventRepo;
     private final UserRepository userRepo;
     private final SubscriptionRepository subscriptionRepo;
+    private final SubscriptionService subscriptionService;
     private final EmailService emailService;
 
     // GET /subscriptions — eventos subscritos pelo utilizador autenticado
@@ -125,7 +128,23 @@ public class SubscriptionController {
         Subscription sub = new Subscription();
         sub.setUser(user);
         sub.setEvent(event);
-        subscriptionRepo.save(sub);
+        // subscriptionService.trySave grava numa transação própria (REQUIRES_NEW) — ver essa
+        // classe para o porquê. Apanhar a exceção aqui, já fora dessa transação nested (que
+        // entretanto fez rollback normalmente), é o único ponto onde isto é seguro: apanhá-la
+        // dentro da própria transação que falhou nunca funciona (o commit dessa transação
+        // falharia sempre com UnexpectedRollbackException, JPA/Hibernate obrigam a isso).
+        try {
+            subscriptionService.trySave(sub);
+        } catch (DataIntegrityViolationException ex) {
+            // Duas chamadas verdadeiramente concorrentes do mesmo utilizador (ex.: duplo clique)
+            // podem ambas passar o exists() acima antes de qualquer uma gravar — o lock
+            // pessimista no evento serializa-as, mas só protege a capacidade, não este par
+            // user_id+event_id. A que perde a corrida cai aqui; já está inscrito (foi a outra
+            // chamada que o fez), por isso continua a ser um sucesso idempotente para quem fez
+            // este pedido, não um erro — mesmo padrão de FavoriteController.favorite(). Sem
+            // email de confirmação aqui: não foi esta chamada que criou a inscrição.
+            return ResponseEntity.ok(Map.of("subscribed", true));
+        }
         emailService.sendSignupConfirmationEmail(user, event);
 
         return ResponseEntity.ok(Map.of("subscribed", true));

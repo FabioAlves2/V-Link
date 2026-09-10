@@ -66,4 +66,17 @@ class LoginAttemptServiceTest {
         assertThat(service.isBlocked("victim@example.com", IP)).isTrue();
         assertThat(service.isBlocked("victim@example.com", OTHER_IP)).isFalse();
     }
+
+    // Regressão (achado Low do audit de 2026-09-10): a chave só fazia toLowerCase(), sem
+    // trim() — " user@example.com" e "user@example.com " geravam chaves diferentes da versão
+    // sem espaço, permitindo espalhar tentativas falhadas por vários "baldes" em vez de os
+    // acumular todos na mesma conta. Inofensivo na prática (AuthController.login também não
+    // faz trim, por isso essas variantes nunca correspondiam à conta real), mas inconsistente.
+    @Test
+    void trackingTrimsWhitespaceAroundTheEmail() {
+        for (int i = 0; i < 5; i++) {
+            service.recordFailure("  user@example.com  ", IP);
+        }
+        assertThat(service.isBlocked("user@example.com", IP)).isTrue();
+    }
 }

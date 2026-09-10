@@ -31,3 +31,7 @@ logs/
 .agents/
 .claude/
 skills-lock.json
+
+# Internal security audit reports (not for public repo)
+SECURITY_AUDIT_*.md
+SECURITY_TEST_REPORT.md

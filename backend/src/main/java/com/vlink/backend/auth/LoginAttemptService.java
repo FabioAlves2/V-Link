@@ -49,7 +49,11 @@ public class LoginAttemptService {
         return Instant.now().isAfter(a.windowStart().plusSeconds(WINDOW_SECONDS));
     }
 
+    // trim() + toLowerCase(): sem o trim, "email@x.com" e " email@x.com" geravam chaves
+    // diferentes (nunca coincidindo com a conta real em AuthController.login, que também não
+    // faz trim — por isso inofensivo na prática, mas inconsistente) — normaliza aqui da mesma
+    // forma que faria sentido em qualquer comparação de email.
     private String key(String email, String ip) {
-        return (email == null ? "" : email.toLowerCase()) + "|" + (ip == null ? "" : ip);
+        return (email == null ? "" : email.trim().toLowerCase()) + "|" + (ip == null ? "" : ip);
     }
 }
