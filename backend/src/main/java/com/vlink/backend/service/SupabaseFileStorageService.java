@@ -45,8 +45,15 @@ public class SupabaseFileStorageService implements FileStorageService {
         this.bucket = bucket;
         String base = projectUrl.endsWith("/") ? projectUrl.substring(0, projectUrl.length() - 1) : projectUrl;
         this.publicUrlBase = base + "/storage/v1/object/public/" + bucket;
+        // The S3-compatible API lives on a DIFFERENT subdomain (storage.supabase.co) than the
+        // project's own API/public-object domain (<ref>.supabase.co) used above for
+        // publicUrlBase — pointing the S3 client at the wrong one doesn't fail fast, it just
+        // hangs until the client times out (found live: registration/login/event-creation all
+        // worked, only the S3 upload call hung).
+        String projectRef = base.replaceFirst("^https?://", "").split("\\.")[0];
+        String s3Endpoint = "https://" + projectRef + ".storage.supabase.co/storage/v1/s3";
         this.s3Client = S3Client.builder()
-            .endpointOverride(URI.create(base + "/storage/v1/s3"))
+            .endpointOverride(URI.create(s3Endpoint))
             .region(Region.of(region))
             .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey)))
             .forcePathStyle(true)
