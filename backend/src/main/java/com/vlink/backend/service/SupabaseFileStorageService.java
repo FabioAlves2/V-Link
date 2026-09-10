@@ -19,6 +19,7 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.io.IOException;
 import java.net.URI;
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
@@ -57,6 +58,12 @@ public class SupabaseFileStorageService implements FileStorageService {
             .region(Region.of(region))
             .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey)))
             .forcePathStyle(true)
+            // The default SDK client has no bound on how long a call can hang — a single bad
+            // connection would tie up a Tomcat thread indefinitely on Render's single-worker
+            // free tier. Fail fast instead so a network problem surfaces as a real exception.
+            .overrideConfiguration(o -> o
+                .apiCallTimeout(Duration.ofSeconds(15))
+                .apiCallAttemptTimeout(Duration.ofSeconds(8)))
             .build();
     }
 
