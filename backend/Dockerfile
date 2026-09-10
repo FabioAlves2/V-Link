@@ -26,4 +26,9 @@ EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --start-period=30s --retries=5 \
     CMD wget -qO- http://localhost:8080/actuator/health || exit 1
 
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# JAVA_OPTS defaults to nothing (docker-compose demo keeps the JVM's normal auto-sized heap).
+# Render's free tier caps the whole container at 512MB, so its env vars set JAVA_OPTS to a
+# conservative -Xmx — real headroom, not a guarantee: Spring Boot's own baseline (embedded
+# Tomcat, Hibernate, loaded classes) can still approach that limit under real load.
+ENV JAVA_OPTS=""
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar app.jar"]

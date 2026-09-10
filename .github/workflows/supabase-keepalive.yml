@@ -1,0 +1,22 @@
+name: Supabase keep-alive
+
+# Supabase's free tier pauses a project after 7 days with zero DB activity, with no
+# auto-resume — it stays offline until someone manually clicks "Restore" in the dashboard.
+# This pings the DB directly (raw SQL over the same connection the backend uses), well inside
+# that window, so the demo project never goes dark on its own. Deliberately not a call to
+# Supabase's REST/anon-key API — the backend has never used that layer, and pinging it would
+# mean relying on Row Level Security being correctly locked down on every table, which it
+# isn't designed around at all (see plan.md Milestone 5).
+on:
+  schedule:
+    - cron: "0 6 * * 1" # every Monday, 06:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install postgresql-client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Ping Supabase Postgres
+        run: psql "${{ secrets.SUPABASE_DB_URL }}" -c "SELECT 1;"

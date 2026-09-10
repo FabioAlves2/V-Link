@@ -18,5 +18,24 @@ spring:
 
 app:
   mail:
-    enabled: true
+    # Overridable per deployment: the docker-compose local demo leaves this at the default
+    # (true) — mail is non-functional there without real SMTP creds, but harmless (best-effort,
+    # EmailService swallows failures). The Render deploy sets APP_MAIL_ENABLED=false outright,
+    # since Brevo can't be used without owning a domain to authenticate against (see plan.md
+    # Milestone 5) — MAIL_HOST/MAIL_USERNAME/MAIL_PASSWORD below still need *some* value even
+    # when disabled, because spring-boot-starter-mail's autoconfiguration resolves them eagerly
+    # at boot regardless of this flag.
+    enabled: ${APP_MAIL_ENABLED:true}
     from: ${MAIL_FROM:no-reply@vlink.pt}
+  storage:
+    # "local" (default) keeps event images on disk under app.upload.dir — what the
+    # docker-compose demo uses, since it also runs this prod profile but has no Supabase
+    # credentials at all. "supabase" (Render only) switches to SupabaseFileStorageService so
+    # images survive a redeploy/cold restart. Deliberately its own switch, not the Spring
+    # profile — see LocalFileStorageService/SupabaseFileStorageService.
+    provider: ${APP_STORAGE_PROVIDER:local}
+    supabase:
+      project-url: ${SUPABASE_PROJECT_URL:}
+      bucket: ${SUPABASE_STORAGE_BUCKET:event-images}
+      access-key: ${SUPABASE_S3_ACCESS_KEY:}
+      secret-key: ${SUPABASE_S3_SECRET_KEY:}

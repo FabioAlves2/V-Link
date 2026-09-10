@@ -9,7 +9,7 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class FileStorageServiceTest {
+class LocalFileStorageServiceTest {
 
     // Regressão: deletePreviousImage() só validava um prefixo "/uploads/" *antes* de
     // normalizar o caminho — "../" no resto da string escapava do diretório de uploads depois
@@ -20,7 +20,7 @@ class FileStorageServiceTest {
         Path canary = Files.createTempFile(uploadDir.getParent(), "canary-outside-upload-dir", ".txt");
         assertTrue(Files.exists(canary));
 
-        FileStorageService service = new FileStorageService();
+        LocalFileStorageService service = new LocalFileStorageService();
         ReflectionTestUtils.setField(service, "uploadDir", uploadDir.toString());
 
         String traversalUrl = "/uploads/../" + canary.getFileName();
@@ -38,7 +38,7 @@ class FileStorageServiceTest {
         Path inside = Files.createFile(uploadDir.resolve("real-image.png"));
         assertTrue(Files.exists(inside));
 
-        FileStorageService service = new FileStorageService();
+        LocalFileStorageService service = new LocalFileStorageService();
         ReflectionTestUtils.setField(service, "uploadDir", uploadDir.toString());
 
         service.deletePreviousImage("/uploads/real-image.png");

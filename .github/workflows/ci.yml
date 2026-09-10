@@ -31,3 +31,17 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run test
+
+  # Only runs after backend+frontend pass, and only for a push to main — a red CI run, or a
+  # PR branch, never reaches Render/Vercel. Render's and Vercel's own git-push auto-deploy must
+  # stay OFF in their dashboards, or they'd deploy independently of this gate (see plan.md
+  # Milestone 5).
+  deploy:
+    needs: [backend, frontend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy
+        run: curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
+      - name: Trigger Vercel deploy
+        run: curl -fsS -X POST "${{ secrets.VERCEL_DEPLOY_HOOK_URL }}"
