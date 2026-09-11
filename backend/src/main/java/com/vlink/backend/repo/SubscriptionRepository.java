@@ -24,6 +24,19 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
     @Transactional
     void deleteByEventId(Long eventId);
 
+    // Contagem em lote para listagens (GET /events, GET /events/mine) — uma única query
+    // agregada em vez de countByEventId por evento (N+1, cada uma um round-trip à BD; a
+    // combinação com a latência cross-region Render/Supabase fazia o p95 de GET /events
+    // disparar mesmo a baixa carga). Eventos sem inscrições não aparecem no resultado
+    // (GROUP BY não produz zeros) — o chamador trata isso com getOrDefault(0).
+    interface EventSubscriberCount {
+        Long getEventId();
+        long getCount();
+    }
+
+    @Query("SELECT s.event.id AS eventId, COUNT(s) AS count FROM Subscription s WHERE s.event.id IN :eventIds GROUP BY s.event.id")
+    List<EventSubscriberCount> countByEventIds(@Param("eventIds") List<Long> eventIds);
+
     // Elegível para lembrete: ainda não avisado, o evento continua publicado e começa dentro
     // da janela configurada (app.mail.reminder-window-hours). CLOSED nunca entra aqui (encerrar
     // exige que o evento já tenha começado, logo startDate já não pode estar no futuro).

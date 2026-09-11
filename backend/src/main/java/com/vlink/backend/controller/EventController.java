@@ -28,6 +28,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/events")
@@ -58,8 +59,22 @@ public class EventController {
         @RequestParam(required = false) String keyword
     ) {
         List<Event> events = repo.findByFilters(location, date, type, keyword, LocalDateTime.now());
-        events.forEach(this::withSubscriberCount);
+        withSubscriberCounts(events);
         return events;
+    }
+
+    // Uma única query agregada (GROUP BY) para toda a lista, em vez de subscriptionRepo.countByEventId
+    // por evento (withSubscriberCount, ainda usado nos endpoints de um único evento) — evita o N+1
+    // que, com a latência cross-region entre o Render e o Supabase, dominava a latência de GET /events
+    // mesmo a baixa carga (confirmado: GET /events/{id}, sem N+1, ~3x mais rápido sob a mesma carga).
+    private void withSubscriberCounts(List<Event> events) {
+        if (events.isEmpty()) return;
+        Map<Long, Long> counts = subscriptionRepo.countByEventIds(events.stream().map(Event::getId).toList())
+            .stream()
+            .collect(Collectors.toMap(
+                SubscriptionRepository.EventSubscriberCount::getEventId,
+                SubscriptionRepository.EventSubscriberCount::getCount));
+        events.forEach(e -> e.setSubscriberCount(counts.getOrDefault(e.getId(), 0L).intValue()));
     }
 
     // GET /events/mine  (só PROMOTER — os eventos do próprio, incluindo rascunhos)
