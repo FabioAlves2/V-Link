@@ -3,6 +3,24 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/vmp}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
+    hikari:
+      # Spring Boot's default (10) was getting exhausted at 50 req/s against the Render free-tier
+      # deploy: confirmed live via Render logs (2 independent incidents) that Postgres connections
+      # under the default 30s connectionTimeout queued up faster than the cross-region Render
+      # (Frankfurt) <-> Supabase (eu-north-1) round trip could drain them, backing up Tomcat's own
+      # request queue until the whole service crashed and needed a ~200s auto-restart. Verified via
+      # `SHOW max_connections` directly against the Supabase Postgres instance (60, with ~21 already
+      # held by Supabase's own internal roles — supabase_admin/authenticator/pgbouncer/postgres —
+      # leaving ~39 free) before raising this, so the pool doesn't just move the bottleneck to the
+      # database itself; 20 leaves comfortable headroom. Couldn't independently verify Supavisor's
+      # own client-facing pool_size (Supabase dashboard/Management API, no token for this session) —
+      # if that's smaller than 20, IT becomes the effective ceiling instead of this setting.
+      maximum-pool-size: ${DB_POOL_SIZE:20}
+      # Fail fast instead of queueing: a request that can't get a connection within 5s returns a
+      # clean 500 instead of piling up behind the previous 30s default, which is what turned a
+      # transient spike into a full service crash (300 requests all waiting up to 30s each pinned
+      # every Tomcat worker thread simultaneously).
+      connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:5000}
   jpa:
     hibernate:
       ddl-auto: validate
