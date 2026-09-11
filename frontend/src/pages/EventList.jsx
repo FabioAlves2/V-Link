@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Box, Typography, TextField, MenuItem, Card, CardMedia,
@@ -38,7 +38,10 @@ export default function EventList() {
   const [filters, setFilters] = useState({ keyword: "", location: "", date: "", type: "" });
   const latestRequestId = useRef(0);
 
-  const fetchEvents = async () => {
+  // useCallback (not just a plain function) so this has a stable identity across renders that
+  // only changes when filters actually does — needed to satisfy the debounce effect's dependency
+  // array below without it re-firing on every unrelated render.
+  const fetchEvents = useCallback(async () => {
     const requestId = ++latestRequestId.current;
     setLoading(true);
     try {
@@ -54,13 +57,13 @@ export default function EventList() {
     } finally {
       if (requestId === latestRequestId.current) setLoading(false);
     }
-  };
+  }, [filters]);
 
   // Debounce: espera que o utilizador pare de escrever antes de pesquisar
   useEffect(() => {
     const timeout = setTimeout(fetchEvents, 400);
     return () => clearTimeout(timeout);
-  }, [filters]);
+  }, [fetchEvents]);
 
   const clearFilters = () => {
     setFilters({ keyword: "", location: "", date: "", type: "" });

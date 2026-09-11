@@ -33,13 +33,16 @@ describe("Login", () => {
     mockNavigate.mockReset();
   });
 
+  // { selector: "input" } is required, not optional, since Login.jsx's show/hide-password
+  // IconButton now has an aria-label containing "password" too — without it, exact:false
+  // matches both the field and the button and throws (multiple elements found).
   it("logs in and navigates to /events on valid credentials", async () => {
     login.mockResolvedValue({ data: { token: "access-token", refreshToken: "refresh-token" } });
     const user = userEvent.setup();
     renderLogin();
 
     await user.type(screen.getByLabelText("Email", { exact: false }), "user@example.com");
-    await user.type(screen.getByLabelText("Password", { exact: false }), "password123");
+    await user.type(screen.getByLabelText("Password", { exact: false, selector: "input" }), "password123");
     await user.click(screen.getByRole("button", { name: /entrar/i }));
 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith("/events"));
@@ -52,7 +55,7 @@ describe("Login", () => {
     renderLogin();
 
     await user.type(screen.getByLabelText("Email", { exact: false }), "user@example.com");
-    await user.type(screen.getByLabelText("Password", { exact: false }), "wrongpassword");
+    await user.type(screen.getByLabelText("Password", { exact: false, selector: "input" }), "wrongpassword");
     await user.click(screen.getByRole("button", { name: /entrar/i }));
 
     expect(await screen.findByText("Credenciais inválidas.")).toBeInTheDocument();

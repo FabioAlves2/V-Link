@@ -42,7 +42,7 @@ export default function Register() {
     };
 
     return (
-        <Box sx={{
+        <Box component="main" sx={{
             minHeight: "100vh", backgroundColor: "#F8F3E6",
             display: "flex", alignItems: "center", justifyContent: "center",
             px: 2, py: 6,
@@ -118,7 +118,11 @@ export default function Register() {
                         InputProps={{
                             endAdornment: (
                                 <InputAdornment position="end">
-                                    <IconButton onClick={() => setShowPass(!showPass)} edge="end">
+                                    <IconButton
+                                        onClick={() => setShowPass(!showPass)}
+                                        edge="end"
+                                        aria-label={showPass ? "Ocultar password" : "Mostrar password"}
+                                    >
                                         {showPass ? <VisibilityOff /> : <Visibility />}
                                     </IconButton>
                                 </InputAdornment>

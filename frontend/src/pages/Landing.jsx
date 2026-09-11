@@ -11,7 +11,7 @@ export default function Landing() {
     const navigate = useNavigate();
 
     return (
-        <Box sx={{ backgroundColor: "#F8F3E6", minHeight: "100vh", fontFamily: "'DM Sans', sans-serif" }}>
+        <Box component="main" sx={{ backgroundColor: "#F8F3E6", minHeight: "100vh", fontFamily: "'DM Sans', sans-serif" }}>
 
             {/* Header */}
             <Box component="header" sx={{
