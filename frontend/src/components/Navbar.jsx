@@ -10,6 +10,11 @@ import { getNotifications, getUnreadCount, markNotificationRead } from "../api/n
 
 const roleLabel = { VOLUNTEER: "Voluntário", PROMOTER: "Promotor" };
 const roleColor = { VOLUNTEER: "#52B788", PROMOTER: "#D4A853" };
+// Darker than roleColor on purpose: roleColor is also the chip's background tint/border (fine as
+// a decorative fill), but reused as-is for the chip's *text* it fails WCAG AA's 4.5:1 contrast
+// ratio against that tinted background (measured live via Lighthouse — PROMOTER came out 4.04:1,
+// VOLUNTEER 3.60:1). These pass (5.23:1 / 5.27:1) while staying in the same hue.
+const roleTextColor = { VOLUNTEER: "#7FD9AE", PROMOTER: "#E8C179" };
 const NOTIFICATIONS_POLL_MS = 30000;
 
 export default function Navbar() {
@@ -245,7 +250,7 @@ export default function Navbar() {
                         size="small"
                         sx={{
                             backgroundColor: `${roleColor[role]}22`,
-                            color: roleColor[role] || "#F8F3E6",
+                            color: roleTextColor[role] || "#F8F3E6",
                             fontWeight: 600, fontSize: "0.75rem",
                             height: 22, border: `1px solid ${roleColor[role]}44`,
                         }}
@@ -291,7 +296,7 @@ export default function Navbar() {
                     <MenuItem
                         onClick={() => { logout(); navigate("/"); setAnchorEl(null); }}
                         sx={{
-                            color: "#E53E3E", gap: 1.5, py: 1.5,
+                            color: "#C62828", gap: 1.5, py: 1.5,
                             "&:hover": { backgroundColor: "#FFF5F5" },
                         }}
                     >

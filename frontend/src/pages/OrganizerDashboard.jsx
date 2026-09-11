@@ -11,10 +11,14 @@ import { resolveImageUrl } from "../utils/image";
 const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1593113598332-cd288d649433?w=400&q=70";
 
 const STATUS_LABEL = { DRAFT: "Rascunho", PUBLISHED: "Publicado", CLOSED: "Encerrado" };
+// Text colors darker than the equivalent brand/status hue would suggest: measured live via
+// Lighthouse that the obvious choice (e.g. PUBLISHED "#16A34A") falls short of WCAG AA's 4.5:1
+// against this chip's own tinted background (2.97:1 measured) — these pass (4.88:1+) in the same
+// hue family.
 const STATUS_STYLE = {
-    DRAFT: { bg: "#D4A85320", color: "#B4842F" },
-    PUBLISHED: { bg: "#52B78820", color: "#16A34A" },
-    CLOSED: { bg: "#6B728015", color: "#6B7280" },
+    DRAFT: { bg: "#D4A85320", color: "#8A5F1F" },
+    PUBLISHED: { bg: "#52B78820", color: "#0F7A3D" },
+    CLOSED: { bg: "#6B728015", color: "#52525B" },
 };
 
 function formatDate(dt) {
@@ -209,8 +213,8 @@ export default function OrganizerDashboard() {
                                                 onClick={(e) => handleDelete(e, event,
                                                     `Eliminar o rascunho "${event.title}"? Esta ação não pode ser desfeita.`)}
                                                 sx={{
-                                                    color: "#E53E3E", borderColor: "#E53E3E40", whiteSpace: "nowrap",
-                                                    "&:hover": { backgroundColor: "#E53E3E10", borderColor: "#E53E3E" },
+                                                    color: "#C62828", borderColor: "#C6282840", whiteSpace: "nowrap",
+                                                    "&:hover": { backgroundColor: "#C6282810", borderColor: "#C62828" },
                                                 }}
                                             >
                                                 Eliminar
@@ -224,8 +228,8 @@ export default function OrganizerDashboard() {
                                                 onClick={(e) => handleDelete(e, event,
                                                     `Cancelar "${event.title}"? Esta ação é permanente — o evento e as inscrições serão eliminados, e os inscritos serão notificados.`)}
                                                 sx={{
-                                                    color: "#E53E3E", borderColor: "#E53E3E40", whiteSpace: "nowrap",
-                                                    "&:hover": { backgroundColor: "#E53E3E10", borderColor: "#E53E3E" },
+                                                    color: "#C62828", borderColor: "#C6282840", whiteSpace: "nowrap",
+                                                    "&:hover": { backgroundColor: "#C6282810", borderColor: "#C62828" },
                                                 }}
                                             >
                                                 Cancelar
@@ -238,8 +242,8 @@ export default function OrganizerDashboard() {
                                                 disabled={closing === event.id}
                                                 onClick={(e) => handleClose(e, event)}
                                                 sx={{
-                                                    color: "#E53E3E", borderColor: "#E53E3E40", whiteSpace: "nowrap",
-                                                    "&:hover": { backgroundColor: "#E53E3E10", borderColor: "#E53E3E" },
+                                                    color: "#C62828", borderColor: "#C6282840", whiteSpace: "nowrap",
+                                                    "&:hover": { backgroundColor: "#C6282810", borderColor: "#C62828" },
                                                 }}
                                             >
                                                 Encerrar

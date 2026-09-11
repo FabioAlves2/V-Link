@@ -207,11 +207,11 @@ export default function MySubscriptions() {
                                                 disabled={removing === event.id}
                                                 onClick={(e) => handleUnsubscribe(e, event.id)}
                                                 sx={{
-                                                    color: "#E53E3E", borderColor: "#E53E3E40",
+                                                    color: "#C62828", borderColor: "#C6282840",
                                                     fontSize: "0.8rem", whiteSpace: "nowrap",
                                                     "&:hover": {
-                                                        backgroundColor: "#E53E3E10",
-                                                        borderColor: "#E53E3E",
+                                                        backgroundColor: "#C6282810",
+                                                        borderColor: "#C62828",
                                                     },
                                                 }}
                                             >
