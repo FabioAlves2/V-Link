@@ -177,7 +177,7 @@ export default function Navbar() {
                 </Box>
 
                 {/* Notificações */}
-                <IconButton onClick={openNotifications} sx={{ color: "rgba(255,255,255,0.85)", mr: 1 }}>
+                <IconButton onClick={openNotifications} aria-label="Notificações" sx={{ color: "rgba(255,255,255,0.85)", mr: 1 }}>
                     <Badge badgeContent={unreadCount} color="error" max={9}>
                         <NotificationsNone />
                     </Badge>
